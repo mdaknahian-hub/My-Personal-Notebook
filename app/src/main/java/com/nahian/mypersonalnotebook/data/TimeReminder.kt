@@ -11,6 +11,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Upsert
 import com.nahian.mypersonalnotebook.reminders.TimeReminderScheduler
 import com.nahian.mypersonalnotebook.notifications.TimeReminderNotifications
+import com.nahian.mypersonalnotebook.domain.TimeReminderRules
 import java.security.SecureRandom
 import kotlinx.coroutines.flow.Flow
 
@@ -74,12 +75,9 @@ class TimeReminderRepository(context: Context) {
     fun observeAll(): Flow<List<TimeReminder>> = dao.observeAll()
 
     suspend fun save(reminder: TimeReminder): ContentResult {
-        if (reminder.title.isBlank()) return ContentResult.Error("Add a title for this reminder.")
-        if (reminder.message.isBlank()) return ContentResult.Error("Add a reminder message.")
+        TimeReminderRules.validate(reminder.title, reminder.message, reminder.scheduledAt, System.currentTimeMillis())
+            ?.let { return ContentResult.Error(it) }
         TimeReminderNotifications.notificationPermissionIssue(appContext)?.let { return ContentResult.Error(it) }
-        if (reminder.scheduledAt <= System.currentTimeMillis() + MINIMUM_LEAD_TIME_MS) {
-            return ContentResult.Error("Choose a future date and time.")
-        }
         val previous = dao.getById(reminder.id)
         val now = System.currentTimeMillis()
         val notificationId = previous?.notificationId ?: reminder.notificationId.takeIf { it > 0 } ?: nextNotificationId()
@@ -107,7 +105,7 @@ class TimeReminderRepository(context: Context) {
     suspend fun setEnabled(id: String, enabled: Boolean): ContentResult {
         val current = dao.getById(id) ?: return ContentResult.Error("This reminder no longer exists.")
         if (enabled) TimeReminderNotifications.notificationPermissionIssue(appContext)?.let { return ContentResult.Error(it) }
-        if (enabled && current.scheduledAt <= System.currentTimeMillis()) {
+        if (enabled && !TimeReminderRules.canEnable(current.scheduledAt, System.currentTimeMillis())) {
             return ContentResult.Error("Choose a new future time before enabling this reminder.")
         }
         val updated = current.copy(enabled = enabled, updatedAt = System.currentTimeMillis(), scheduleError = null)
@@ -147,7 +145,7 @@ class TimeReminderRepository(context: Context) {
         val errors = mutableListOf<String>()
         for (reminder in dao.getEnabled()) {
             val scheduled = if (reminder.scheduledAt <= now) {
-                reminder.copy(scheduledAt = now + MINIMUM_LEAD_TIME_MS, updatedAt = now)
+                reminder.copy(scheduledAt = now + TimeReminderRules.MINIMUM_LEAD_TIME_MILLIS, updatedAt = now)
             } else reminder
             val error = TimeReminderScheduler.schedule(appContext, scheduled)
             dao.upsert(scheduled.copy(scheduleError = error))
@@ -169,7 +167,4 @@ class TimeReminderRepository(context: Context) {
         return candidate
     }
 
-    private companion object {
-        const val MINIMUM_LEAD_TIME_MS = 5_000L
-    }
 }

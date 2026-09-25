@@ -64,20 +64,22 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             python3 - "$RUNNER_TEMP/gradle-output.log" <<'PY'
           import pathlib
-          import re
           import sys
 
           lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
-          pattern = re.compile(
-              r"(^e:\s|:\s*error:|\berror\b|^FAILURE:|^What went wrong:|"
-              r"Unresolved reference|Type mismatch|No value passed|Too many arguments|"
-              r"Cannot infer|Conflicting overloads|Expecting)",
-              re.IGNORECASE,
-          )
-          diagnostics = [f"{number}: {line}" for number, line in enumerate(lines, 1) if pattern.search(line)]
-          excerpt = "\n".join(diagnostics[-60:] if diagnostics else lines[-40:])[:12000]
+          numbered = [f"{number}: {line}" for number, line in enumerate(lines, 1)]
+          if len("\n".join(numbered)) <= 12000:
+              excerpt = "\n".join(numbered)
+          else:
+              failure_index = next((i for i, line in enumerate(lines) if "FAILURE:" in line), len(lines) - 1)
+              start = max(0, failure_index - 25)
+              end = min(len(lines), failure_index + 90)
+              sections = numbered[:12] + ["... output elided ..."] + numbered[start:end] + ["... final lines ..."] + numbered[-25:]
+              excerpt = "\n".join(sections)
+              if len(excerpt) > 12000:
+                  excerpt = excerpt[:8000] + "\n... middle elided ...\n" + excerpt[-3500:]
           excerpt = excerpt.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Gradle diagnostics::{excerpt}")
+          print(f"::error title=Gradle output::{excerpt}")
           PY
             exit "$GRADLE_STATUS"
           fi

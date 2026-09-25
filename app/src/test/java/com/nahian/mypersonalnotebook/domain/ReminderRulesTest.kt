@@ -69,6 +69,7 @@ class ReminderRulesTest {
     fun everyVisitAllowsEnterAndExitButDebouncesDuplicateDelivery() {
         val now = at(LocalDate.of(2026, 4, 1), 10)
         val reminder = reminder(RecurrenceType.EVERY_VISIT).copy(
+            triggerType = TriggerType.ENTER_OR_EXIT.storageValue,
             lastTriggeredAt = now,
             lastTransitionType = "ENTER",
         )

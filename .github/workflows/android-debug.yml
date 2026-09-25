@@ -50,7 +50,29 @@ jobs:
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Run unit tests and build debug APK
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --console=plain --stacktrace :app:testDebugUnitTest :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/gradle-output.log"
+          GRADLE_STATUS=${PIPESTATUS[0]}
+          if [ "$GRADLE_STATUS" -ne 0 ]; then
+            {
+              echo "### Gradle failed (last 80 lines)"
+              echo '```text'
+              tail -n 80 "$RUNNER_TEMP/gradle-output.log" | cut -c1-500
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            python3 - "$RUNNER_TEMP/gradle-output.log" <<'PY'
+          import pathlib
+          import sys
+
+          lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          excerpt = "\n".join(lines[-40:])[:12000]
+          excerpt = excerpt.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Gradle build failed::{excerpt}")
+          PY
+            exit "$GRADLE_STATUS"
+          fi
 
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4

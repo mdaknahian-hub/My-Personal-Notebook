@@ -164,7 +164,7 @@ private fun NotebookSummaryScreen(
     val outstandingItems = checklists.sumOf { it.remainingCount }
     val summaryMessage = when {
         activeTimeReminders == 0 && activeLocationReminders == 0 && outstandingItems == 0 -> uiText("A calm place for your notes, plans, and reminders.")
-        language == NotebookLanguage.BANGLA -> "আপনার $activeTimeRemindersটি সময়ভিত্তিক ও $activeLocationRemindersটি সক্রিয় অবস্থানভিত্তিক রিমাইন্ডার আছে; চেকলিস্টে $outstandingItemsটি আইটেম বাকি।"
+        language == NotebookLanguage.BANGLA -> "আপনার ${activeTimeReminders}টি সময়ভিত্তিক ও ${activeLocationReminders}টি সক্রিয় অবস্থানভিত্তিক রিমাইন্ডার আছে; চেকলিস্টে ${outstandingItems}টি আইটেম বাকি।"
         else -> "You have $activeTimeReminders scheduled and $activeLocationReminders active location reminders, with $outstandingItems checklist items left."
     }
     Scaffold(
@@ -205,7 +205,7 @@ private fun NotebookSummaryScreen(
             item {
                 SummaryActionCard(
                     title = "Time reminders",
-                    subtitle = if (activeTimeReminders == 0) uiText("No scheduled reminders") else if (language == NotebookLanguage.BANGLA) "$activeTimeRemindersটি নির্ধারিত রিমাইন্ডার" else "$activeTimeReminders scheduled reminders",
+                    subtitle = if (activeTimeReminders == 0) uiText("No scheduled reminders") else if (language == NotebookLanguage.BANGLA) "${activeTimeReminders}টি নির্ধারিত রিমাইন্ডার" else "$activeTimeReminders scheduled reminders",
                     icon = { Icon(Icons.Filled.Alarm, contentDescription = null) },
                     onClick = onOpenTimeReminders,
                 )
@@ -221,7 +221,7 @@ private fun NotebookSummaryScreen(
             item {
                 SummaryActionCard(
                     title = "Checklists",
-                    subtitle = if (language == NotebookLanguage.BANGLA) "${checklists.size}টি তালিকা · $outstandingItemsটি আইটেম বাকি" else "${checklists.size} lists · $outstandingItems items remaining",
+                    subtitle = if (language == NotebookLanguage.BANGLA) "${checklists.size}টি তালিকা · ${outstandingItems}টি আইটেম বাকি" else "${checklists.size} lists · $outstandingItems items remaining",
                     icon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
                     onClick = onOpenChecklists,
                 )

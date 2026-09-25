@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -53,6 +54,7 @@ internal fun LocationReminderListScreen(
     permissionIssue: PermissionIssue?,
     batteryOptimizationExempt: Boolean,
     onCreate: () -> Unit,
+    onBack: () -> Unit,
     onSetupPermissions: () -> Unit,
     onOpenBatterySettings: () -> Unit,
     onEdit: (LocationReminder) -> Unit,
@@ -63,8 +65,11 @@ internal fun LocationReminderListScreen(
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Text("My Personal Notebook", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text("NAHIAN'S NOTEBOOK", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to summary")
+                }
                 Column(Modifier.weight(1f)) {
                     Text("Location Reminders", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("A useful nudge, right where you need it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

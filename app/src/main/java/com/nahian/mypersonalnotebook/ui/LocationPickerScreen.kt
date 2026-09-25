@@ -107,6 +107,13 @@ internal fun LocationPickerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    fun selectLocation(location: LocationPoint) {
+        selectedLocation = location
+        savedLabel = location.label
+        localError = null
+        if (!previewOnly) onUse(location)
+    }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
@@ -145,8 +152,7 @@ internal fun LocationPickerScreen(
                         currentLocationLoading = true
                         scope.launch {
                             try {
-                                selectedLocation = currentDeviceLocation(context)
-                                savedLabel = selectedLocation?.label.orEmpty()
+                                selectLocation(currentDeviceLocation(context))
                             } catch (error: Exception) {
                                 localError = error.message ?: "Could not get the current location. Turn on Location and try again."
                             } finally {
@@ -159,7 +165,8 @@ internal fun LocationPickerScreen(
             )
             1 -> Column(Modifier.fillMaxSize()) {
                 Text(
-                    "Tap the map to place the geofence center. Map tiles need internet; reminders do not.",
+                    if (previewOnly) "Tap the map to preview a point. Map tiles need internet."
+                    else "Tap the map once to choose the geofence center; it will return to the form. Map tiles need internet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
@@ -168,11 +175,7 @@ internal fun LocationPickerScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
                     initial = selectedLocation,
                     selected = selectedLocation,
-                    onSelected = {
-                        selectedLocation = it
-                        savedLabel = it.label
-                        localError = null
-                    },
+                    onSelected = ::selectLocation,
                 )
                 localError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(14.dp)) }
             }
@@ -201,21 +204,14 @@ internal fun LocationPickerScreen(
                         }
                     }
                 },
-                onSelect = {
-                    selectedLocation = it
-                    savedLabel = it.label
-                    localError = null
-                },
+                onSelect = ::selectLocation,
             )
             else -> SavedLocationsTab(
                 locations = savedLocations,
                 selected = selectedLocation,
                 savedLabel = savedLabel,
                 onLabelChange = { savedLabel = it },
-                onSelect = {
-                    selectedLocation = LocationPoint(it.label, it.latitude, it.longitude)
-                    savedLabel = it.label
-                },
+                onSelect = { selectLocation(LocationPoint(it.label, it.latitude, it.longitude)) },
                 onSave = {
                     val value = selectedLocation
                     if (value == null) localError = "Choose a current, map, or search result first."
@@ -230,7 +226,7 @@ internal fun LocationPickerScreen(
             )
         }
 
-        selectedLocation?.let { location ->
+        selectedLocation?.takeIf { previewOnly }?.let { location ->
             Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 4.dp) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

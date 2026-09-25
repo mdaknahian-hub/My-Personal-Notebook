@@ -13,7 +13,7 @@
         android:name=".NotebookApplication"
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
-        android:label="My Personal Notebook"
+        android:label="NAHIAN'S NOTEBOOK"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyPersonalNotebook"
         android:usesCleartextTraffic="false">

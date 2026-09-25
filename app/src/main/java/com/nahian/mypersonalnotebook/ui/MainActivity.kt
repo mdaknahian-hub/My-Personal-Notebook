@@ -46,6 +46,7 @@ import android.content.pm.PackageManager
 import com.nahian.mypersonalnotebook.data.LocationPoint
 import com.nahian.mypersonalnotebook.data.LocationReminder
 import com.nahian.mypersonalnotebook.data.LocationReminderRepository
+import com.nahian.mypersonalnotebook.data.NotebookContentRepository
 import com.nahian.mypersonalnotebook.data.OperationResult
 import com.nahian.mypersonalnotebook.data.ReminderDatabase
 import com.nahian.mypersonalnotebook.domain.ReminderRules
@@ -59,9 +60,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val repository = LocationReminderRepository(applicationContext, ReminderDatabase.get(applicationContext))
+        val contentRepository = NotebookContentRepository(applicationContext)
+        val initialReminderId = intent.getStringExtra(EXTRA_REMINDER_ID)
         setContent {
             NotebookTheme {
-                LocationReminderApp(repository = repository, initialReminderId = intent.getStringExtra(EXTRA_REMINDER_ID))
+                NotebookAppRoot(
+                    locationRepository = repository,
+                    contentRepository = contentRepository,
+                    initialReminderId = initialReminderId,
+                )
             }
         }
     }
@@ -72,7 +79,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun LocationReminderApp(repository: LocationReminderRepository, initialReminderId: String?) {
+internal fun LocationReminderApp(
+    repository: LocationReminderRepository,
+    initialReminderId: String?,
+    onExit: () -> Unit,
+) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -99,8 +110,12 @@ private fun LocationReminderApp(repository: LocationReminderRepository, initialR
     var isSaving by remember { mutableStateOf(false) }
     var reminderToDelete by remember { mutableStateOf<LocationReminder?>(null) }
 
-    BackHandler(enabled = pickerMode != null || draft != null) {
-        if (pickerMode != null) pickerMode = null else draft = null
+    BackHandler(enabled = true) {
+        when {
+            pickerMode != null -> pickerMode = null
+            draft != null -> draft = null
+            else -> onExit()
+        }
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -362,6 +377,7 @@ private fun LocationReminderApp(repository: LocationReminderRepository, initialR
                     permissionIssue = currentPermissionIssue,
                     batteryOptimizationExempt = batteryExempt,
                     onCreate = ::createNewReminder,
+                    onBack = onExit,
                     onSetupPermissions = { showCurrentIssue() },
                     onOpenBatterySettings = {
                         try {

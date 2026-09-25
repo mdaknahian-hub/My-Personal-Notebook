@@ -37,8 +37,26 @@ internal object NotebookLanguageSettings {
     }
 }
 
-internal fun uiText(english: String): String =
-    if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) BANGLA_TEXT[english] ?: english else english
+internal fun uiText(english: String): String {
+    if (NotebookLanguageSettings.current != NotebookLanguage.BANGLA) return english
+    BANGLA_TEXT[english]?.let { return it }
+    return when {
+        english.startsWith("Reminder saved, but Android did not accept its schedule: ") ->
+            "রিমাইন্ডার সংরক্ষণ হয়েছে, তবে Android সময়সূচি গ্রহণ করেনি: " + english.substringAfter("schedule: ")
+        english.startsWith("Reminder saved, but it is not registered yet. ") ->
+            "রিমাইন্ডার সংরক্ষণ হয়েছে, তবে এখনো নিবন্ধিত হয়নি। " + english.substringAfter("registered yet. ")
+        english.startsWith("Reminder is enabled locally but not registered. ") ->
+            "রিমাইন্ডারটি ডিভাইসে চালু, তবে নিবন্ধিত নয়। " + english.substringAfter("registered. ")
+        english.startsWith("Reminder is off, but Android could not remove its geofence: ") ->
+            "রিমাইন্ডার বন্ধ, তবে Android জিওফেন্স সরাতে পারেনি: " + english.substringAfter("geofence: ")
+        english.startsWith("Reminder is off, but Android could not remove its old geofence: ") ->
+            "রিমাইন্ডার বন্ধ, তবে Android পুরোনো জিওফেন্স সরাতে পারেনি: " + english.substringAfter("geofence: ")
+        english.startsWith("Last triggered ") -> "সর্বশেষ চালু: " + english.removePrefix("Last triggered ")
+        english.startsWith("Saved ") && english.endsWith(" on this device.") ->
+            "${english.removePrefix("Saved ").removeSuffix(" on this device.")} এই ডিভাইসে সংরক্ষিত হয়েছে।"
+        else -> english
+    }
+}
 
 private val BANGLA_TEXT = mapOf(
     "Time reminders" to "সময়ভিত্তিক রিমাইন্ডার",
@@ -297,4 +315,33 @@ private val BANGLA_TEXT = mapOf(
     "%d lists · %d items remaining" to "%dটি তালিকা · %dটি আইটেম বাকি",
     "%d recent notes shown below" to "নিচে %dটি সাম্প্রতিক নোট",
     "Your notes and reminders" to "আপনার নোট ও রিমাইন্ডার",
+
+    "Location permission required" to "অবস্থানের অনুমতি প্রয়োজন",
+    "Allow precise location to choose a current location." to "বর্তমান অবস্থান বেছে নিতে নির্ভুল অবস্থানের অনুমতি দিন।",
+    "Android notification permission is needed to test this reminder." to "এই রিমাইন্ডার পরীক্ষা করতে Android-এর নোটিফিকেশন অনুমতি দরকার।",
+    "Enable notifications for NAHIAN'S NOTEBOOK in Android settings." to "Android সেটিংসে NAHIAN'S NOTEBOOK-এর নোটিফিকেশন চালু করুন।",
+    "Enable notifications for NAHIAN'S NOTEBOOK in Android settings, then test again." to "Android সেটিংসে NAHIAN'S NOTEBOOK-এর নোটিফিকেশন চালু করে আবার পরীক্ষা করুন।",
+    "Location reminders are blocked" to "অবস্থানভিত্তিক রিমাইন্ডার বন্ধ",
+    "Allow notifications so Android can show location reminder alerts." to "Android যেন অবস্থানভিত্তিক সতর্কবার্তা দেখাতে পারে, সে জন্য নোটিফিকেশন অনুমোদন করুন।",
+    "Notifications are turned off for NAHIAN'S NOTEBOOK. Enable them in Android settings." to "Android সেটিংসে NAHIAN'S NOTEBOOK-এর নোটিফিকেশন চালু করুন।",
+    "The Location reminders notification channel is blocked. Enable it in Android settings." to "Android সেটিংসে Location reminders নোটিফিকেশন চ্যানেল চালু করুন।",
+    "The Scheduled reminders notification channel is blocked. Enable it in Android settings." to "Android সেটিংসে Scheduled reminders নোটিফিকেশন চ্যানেল চালু করুন।",
+    "Android allows up to 100 active geofences per app." to "প্রতি অ্যাপে Android সর্বোচ্চ ১০০টি সক্রিয় জিওফেন্স অনুমোদন করে।",
+    "Android supports at most 100 active geofences per app." to "প্রতি অ্যাপে Android সর্বোচ্চ ১০০টি সক্রিয় জিওফেন্স সমর্থন করে।",
+    "The selected latitude is invalid. Choose the location again." to "নির্বাচিত অক্ষাংশ সঠিক নয়। স্থানটি আবার বেছে নিন।",
+    "The selected longitude is invalid. Choose the location again." to "নির্বাচিত দ্রাঘিমাংশ সঠিক নয়। স্থানটি আবার বেছে নিন।",
+    "The saved coordinates are invalid. Edit the reminder and choose a location again." to "সংরক্ষিত স্থানাঙ্ক সঠিক নয়। রিমাইন্ডার সম্পাদনা করে আবার স্থান বেছে নিন।",
+    "The saved geofence radius is invalid. Choose 100 m, 200 m, 500 m, or 1 km." to "সংরক্ষিত জিওফেন্স ব্যাসার্ধ সঠিক নয়। ১০০ মি, ২০০ মি, ৫০০ মি বা ১ কিমি বেছে নিন।",
+    "The saved trigger type is invalid. Edit this reminder." to "সংরক্ষিত ট্রিগারের ধরন সঠিক নয়। এই রিমাইন্ডার সম্পাদনা করুন।",
+    "The saved recurrence is invalid. Edit this reminder." to "সংরক্ষিত পুনরাবৃত্তির ধরন সঠিক নয়। এই রিমাইন্ডার সম্পাদনা করুন।",
+    "The saved custom recurrence is invalid. Edit this reminder." to "সংরক্ষিত কাস্টম পুনরাবৃত্তি সঠিক নয়। এই রিমাইন্ডার সম্পাদনা করুন।",
+    "Duplicate geofence ID found in local data; edit this reminder to repair it." to "স্থানীয় ডেটায় একই জিওফেন্স আইডি পাওয়া গেছে; ঠিক করতে এই রিমাইন্ডার সম্পাদনা করুন।",
+    "A larger radius can improve reliability in dense areas." to "ঘনবসতিপূর্ণ এলাকায় বড় ব্যাসার্ধ বেশি নির্ভরযোগ্য হতে পারে।",
+    "Location reminders need precise coordinates to monitor the selected radius." to "নির্বাচিত ব্যাসার্ধ পর্যবেক্ষণে অবস্থানভিত্তিক রিমাইন্ডারের নির্ভুল স্থানাঙ্ক দরকার।",
+    "Open Android Settings and update this app's permissions." to "Android সেটিংস খুলে এই অ্যাপের অনুমতি হালনাগাদ করুন।",
+    "Open Android Settings → Apps → NAHIAN'S NOTEBOOK → Battery." to "Android সেটিংস → Apps → NAHIAN'S NOTEBOOK → Battery খুলুন।",
+    "Reminder saved and registered with Android." to "রিমাইন্ডার সংরক্ষণ করে Android-এ নিবন্ধন করা হয়েছে।",
+    "Reminder saved as disabled." to "রিমাইন্ডার বন্ধ অবস্থায় সংরক্ষণ করা হয়েছে।",
+    "Reminder deleted." to "রিমাইন্ডার মুছে ফেলা হয়েছে।",
+    "Reminder updated." to "রিমাইন্ডার হালনাগাদ করা হয়েছে।",
 )

@@ -44,7 +44,7 @@ Map tiles and geocoder search may require connectivity. Once registered, geofenc
 
 ## Verification status
 
-The verified code build, [36126432233](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36126432233), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. This verifies compilation/tests, **not** installation, alarm delivery, widget behavior, launcher shortcuts, language rendering, or geofencing on a real phone. Do not treat the app as complete until the current build is installed and tested on an actual Android device.
+The verified code build, [36141458199](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36141458199), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. This verifies compilation/tests, **not** installation, profile/theme persistence, voice recognition on the device, alarm delivery, widget behavior, launcher shortcuts, language rendering, or geofencing on a real phone. Do not treat the app as complete until the current build is installed and tested on an actual Android device.
 
 Phone testing should cover:
 

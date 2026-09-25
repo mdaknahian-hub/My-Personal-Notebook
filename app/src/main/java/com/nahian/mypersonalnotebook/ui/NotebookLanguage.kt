@@ -172,6 +172,7 @@ private val BANGLA_TEXT = mapOf(
     "New checklist" to "নতুন চেকলিস্ট",
     "No notification permission" to "নোটিফিকেশনের অনুমতি নেই",
     "No saved locations yet." to "এখনো কোনো স্থান সংরক্ষিত নেই।",
+    "Delete saved location" to "সংরক্ষিত স্থান মুছুন",
     "Title" to "শিরোনাম",
     "Save" to "সংরক্ষণ",
     "Delete" to "মুছুন",

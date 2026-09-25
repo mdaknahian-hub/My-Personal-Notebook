@@ -1,0 +1,41 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="notebook_notes"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_notes"
+        android:shortcutLongLabel="@string/shortcut_notes_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nahian.mypersonalnotebook"
+            android:targetClass="com.nahian.mypersonalnotebook.ui.MainActivity">
+            <extra android:name="open_section" android:value="notes" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="notebook_checklists"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_checklists"
+        android:shortcutLongLabel="@string/shortcut_checklists_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nahian.mypersonalnotebook"
+            android:targetClass="com.nahian.mypersonalnotebook.ui.MainActivity">
+            <extra android:name="open_section" android:value="checklists" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="notebook_time_reminders"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_time_reminders"
+        android:shortcutLongLabel="@string/shortcut_time_reminders_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nahian.mypersonalnotebook"
+            android:targetClass="com.nahian.mypersonalnotebook.ui.MainActivity">
+            <extra android:name="open_section" android:value="time_reminders" />
+        </intent>
+    </shortcut>
+</shortcuts>

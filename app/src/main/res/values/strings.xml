@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">NAHIAN'S NOTEBOOK</string>
+    <string name="shortcut_notes">Notes</string>
+    <string name="shortcut_notes_long">Open notebook notes</string>
+    <string name="shortcut_checklists">Checklists</string>
+    <string name="shortcut_checklists_long">Open your checklists</string>
+    <string name="shortcut_time_reminders">Time reminders</string>
+    <string name="shortcut_time_reminders_long">Open scheduled time reminders</string>
+    <string name="widget_description">NAHIAN'S NOTEBOOK quick links</string>
+</resources>

@@ -120,11 +120,11 @@ internal fun LocationPickerScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onCancel) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText("Back"))
             }
             Column(Modifier.weight(1f)) {
-                Text(if (previewOnly) "Selected location" else "Choose a location", style = MaterialTheme.typography.titleLarge)
-                Text("Pick once; Android monitors the geofence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText(if (previewOnly) "Selected location" else "Choose a location"), style = MaterialTheme.typography.titleLarge)
+                Text(uiText("Pick once; Android monitors the geofence"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -133,7 +133,7 @@ internal fun LocationPickerScreen(
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(title) },
+                    text = { Text(uiText(title)) },
                 )
             }
         }
@@ -177,7 +177,7 @@ internal fun LocationPickerScreen(
                     selected = selectedLocation,
                     onSelected = ::selectLocation,
                 )
-                localError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(14.dp)) }
+                localError?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(14.dp)) }
             }
             2 -> SearchLocationTab(
                 query = searchText,
@@ -218,7 +218,7 @@ internal fun LocationPickerScreen(
                     else if (savedLabel.isBlank()) localError = "Give this saved location a name."
                     else {
                         onSaveLocation(savedLabel.trim(), value.latitude, value.longitude)
-                        localError = "Saved ${savedLabel.trim()} on this device."
+                        localError = if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "“${savedLabel.trim()}” এই ডিভাইসে সংরক্ষিত হয়েছে।" else "Saved ${savedLabel.trim()} on this device."
                     }
                 },
                 onDelete = onDeleteSavedLocation,
@@ -239,14 +239,14 @@ internal fun LocationPickerScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        TextButton(onClick = { selectedLocation = null; savedLabel = "" }) { Text("Clear") }
+                        TextButton(onClick = { selectedLocation = null; savedLabel = "" }) { Text(uiText("Clear")) }
                     }
                     Spacer(Modifier.height(8.dp))
                     Button(
                         onClick = { onUse(location) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (previewOnly) "Done viewing map" else "Use this location")
+                        Text(uiText(if (previewOnly) "Done viewing map" else "Use this location"))
                     }
                 }
             }
@@ -268,7 +268,7 @@ private fun CurrentLocationTab(
     ) {
         Icon(Icons.Filled.GpsFixed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
         Spacer(Modifier.height(14.dp))
-        Text("Use your current location", style = MaterialTheme.typography.titleMedium)
+        Text(uiText("Use your current location"), style = MaterialTheme.typography.titleMedium)
         Text(
             "A single current-location fix is used to set the geofence. No continuous GPS tracking is started.",
             style = MaterialTheme.typography.bodyMedium,
@@ -277,10 +277,10 @@ private fun CurrentLocationTab(
         )
         Button(onClick = onUseCurrent, enabled = !loading) {
             if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Text("Get current location")
+            else Text(uiText("Get current location"))
         }
-        if (selected != null) Text("Selected: ${selected.label}", modifier = Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodySmall)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
+        if (selected != null) Text(if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "নির্বাচিত: ${selected.label}" else "Selected: ${selected.label}", modifier = Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodySmall)
+        error?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
     }
 }
 
@@ -296,23 +296,23 @@ private fun SearchLocationTab(
     onSelect: (LocationPoint) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Text("Search by address, business, or landmark", style = MaterialTheme.typography.bodyMedium)
+        Text(uiText("Search by address, business, or landmark"), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                label = { Text("Search places") },
+                label = { Text(uiText("Search places")) },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 modifier = Modifier.weight(1f),
             )
             Button(onClick = onSearch, enabled = !searching, modifier = Modifier.padding(start = 8.dp)) {
                 if (searching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Text("Search")
+                else Text(uiText("Search"))
             }
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
+        error?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f)) {
             items(results) { result ->
@@ -334,11 +334,11 @@ private fun SavedLocationsTab(
     error: String?,
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text("Saved on this device", style = MaterialTheme.typography.titleSmall)
-        Text("Choose a saved place or save your current selection for later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(uiText("Saved on this device"), style = MaterialTheme.typography.titleSmall)
+        Text(uiText("Choose a saved place or save your current selection for later."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
         if (locations.isEmpty()) {
-            Text("No saved locations yet.", modifier = Modifier.padding(vertical = 18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(uiText("No saved locations yet."), modifier = Modifier.padding(vertical = 18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             LazyColumn(Modifier.weight(1f, fill = false)) {
                 items(locations, key = { it.id }) { location ->
@@ -352,7 +352,7 @@ private fun SavedLocationsTab(
                             Text(String.format(Locale.US, "%.5f, %.5f", location.latitude, location.longitude), style = MaterialTheme.typography.bodySmall)
                         }
                         IconButton(onClick = { onDelete(location.id) }) {
-                            Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete saved location")
+                            Icon(Icons.Filled.DeleteOutline, contentDescription = uiText("Delete saved location"))
                         }
                     }
                     HorizontalDivider()
@@ -364,15 +364,15 @@ private fun SavedLocationsTab(
             OutlinedTextField(
                 value = savedLabel,
                 onValueChange = onLabelChange,
-                label = { Text("Name this saved location") },
+                label = { Text(uiText("Name this saved location")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedButton(onClick = onSave, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text("Save selected location")
+                Text(uiText("Save selected location"))
             }
         }
-        error?.let { Text(it, color = if (it.startsWith("Saved ")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
+        error?.let { Text(uiText(it), color = if (it.startsWith("Saved ") || it.startsWith("“")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
 

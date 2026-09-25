@@ -64,6 +64,8 @@ class MainActivity : ComponentActivity() {
         val contentRepository = NotebookContentRepository(applicationContext)
         val timeReminderRepository = TimeReminderRepository(applicationContext)
         val initialReminderId = intent.getStringExtra(EXTRA_REMINDER_ID)
+        val initialOpenSection = intent.getStringExtra(EXTRA_OPEN_SECTION)
+        NotebookLanguageSettings.load(applicationContext)
         setContent {
             NotebookTheme {
                 NotebookAppRoot(
@@ -71,6 +73,7 @@ class MainActivity : ComponentActivity() {
                     contentRepository = contentRepository,
                     timeReminderRepository = timeReminderRepository,
                     initialReminderId = initialReminderId,
+                    initialOpenSection = initialOpenSection,
                 )
             }
         }
@@ -78,6 +81,12 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_REMINDER_ID = "open_location_reminder_id"
+        const val EXTRA_OPEN_SECTION = "open_section"
+        const val SECTION_SUMMARY = "summary"
+        const val SECTION_NOTES = "notes"
+        const val SECTION_CHECKLISTS = "checklists"
+        const val SECTION_TIME_REMINDERS = "time_reminders"
+        const val SECTION_LOCATION_REMINDERS = "location_reminders"
     }
 }
 
@@ -185,7 +194,7 @@ internal fun LocationReminderApp(
     }
 
     fun tellUser(message: String) {
-        scope.launch { snackbarHostState.showSnackbar(message) }
+        scope.launch { snackbarHostState.showSnackbar(uiText(message)) }
     }
 
     fun showCurrentIssue(foregroundOnly: Boolean = false) {
@@ -320,7 +329,11 @@ internal fun LocationReminderApp(
             when (val result = repository.saveReminder(reminder)) {
                 OperationResult.Success -> {
                     draft = null
-                    tellUser("Reminder saved${if (value.enabled) " and registered with Android" else " as disabled"}.")
+                    tellUser(
+                        if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) {
+                            if (value.enabled) "রিমাইন্ডার সংরক্ষণ করে Android-এ নিবন্ধন করা হয়েছে।" else "রিমাইন্ডার বন্ধ অবস্থায় সংরক্ষণ করা হয়েছে।"
+                        } else if (value.enabled) "Reminder saved and registered with Android." else "Reminder saved as disabled.",
+                    )
                 }
                 is OperationResult.Warning -> {
                     draft = null
@@ -386,7 +399,7 @@ internal fun LocationReminderApp(
                         try {
                             activity?.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                         } catch (_: Exception) {
-                            tellUser("Open Android Settings → Apps → My Personal Notebook → Battery.")
+                            tellUser("Open Android Settings → Apps → NAHIAN'S NOTEBOOK → Battery.")
                         }
                     },
                     onEdit = { reminder -> draft = reminder.toDraft() },
@@ -421,20 +434,20 @@ internal fun LocationReminderApp(
     permissionDialog?.let { issue ->
         AlertDialog(
             onDismissRequest = { permissionDialog = null },
-            title = { Text(issue.title) },
-            text = { Text(issue.explanation) },
+            title = { Text(uiText(issue.title)) },
+            text = { Text(uiText(issue.explanation)) },
             confirmButton = {
-                Button(onClick = { performPermissionAction(issue) }) { Text(issue.actionLabel) }
+                Button(onClick = { performPermissionAction(issue) }) { Text(uiText(issue.actionLabel)) }
             },
-            dismissButton = { TextButton(onClick = { permissionDialog = null }) { Text("Not now") } },
+            dismissButton = { TextButton(onClick = { permissionDialog = null }) { Text(uiText("Not now")) } },
         )
     }
 
     reminderToDelete?.let { reminder ->
         AlertDialog(
             onDismissRequest = { reminderToDelete = null },
-            title = { Text("Delete reminder?") },
-            text = { Text("“${reminder.title}” and its Android geofence will be removed from this device.") },
+            title = { Text(uiText("Delete reminder?")) },
+            text = { Text(if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "“${reminder.title}” এবং Android জিওফেন্স এই ডিভাইস থেকে মুছে যাবে।" else "“${reminder.title}” and its Android geofence will be removed from this device.") },
             confirmButton = {
                 Button(onClick = {
                     reminderToDelete = null
@@ -442,9 +455,9 @@ internal fun LocationReminderApp(
                         repository.deleteReminder(reminder.id)
                         tellUser("Reminder deleted.")
                     }
-                }) { Text("Delete") }
+                }) { Text(uiText("Delete")) }
             },
-            dismissButton = { TextButton(onClick = { reminderToDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { reminderToDelete = null }) { Text(uiText("Cancel")) } },
         )
     }
 }
@@ -468,7 +481,7 @@ private fun notificationOnlyIssue(
         return PermissionIssue(
             if (permanentlyDenied) PermissionIssueType.NOTIFICATION_SETTINGS else PermissionIssueType.NOTIFICATION_PERMISSION,
             if (permanentlyDenied) "Notification permission is blocked" else "Allow reminder notifications",
-            if (permanentlyDenied) "Enable notifications for My Personal Notebook in Android settings."
+            if (permanentlyDenied) "Enable notifications for NAHIAN'S NOTEBOOK in Android settings."
             else "Android notification permission is needed to test this reminder.",
             if (permanentlyDenied) "Open notification settings" else "Continue",
         )
@@ -477,7 +490,7 @@ private fun notificationOnlyIssue(
         return PermissionIssue(
             PermissionIssueType.NOTIFICATION_SETTINGS,
             "Notifications are turned off",
-            "Enable notifications for My Personal Notebook in Android settings, then test again.",
+            "Enable notifications for NAHIAN'S NOTEBOOK in Android settings, then test again.",
             "Open notification settings",
         )
     }

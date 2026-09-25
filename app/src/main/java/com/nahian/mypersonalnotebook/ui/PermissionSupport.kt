@@ -56,7 +56,7 @@ internal object PermissionSupport {
                 PermissionIssue(
                     PermissionIssueType.NOTIFICATION_SETTINGS,
                     "Notification permission is blocked",
-                    "Enable notifications for My Personal Notebook in Android settings. Android will not show another permission prompt after repeated denials.",
+                    "Enable notifications for NAHIAN'S NOTEBOOK in Android settings. Android will not show another permission prompt after repeated denials.",
                     "Open notification settings",
                 )
             } else {
@@ -72,7 +72,7 @@ internal object PermissionSupport {
             return PermissionIssue(
                 PermissionIssueType.NOTIFICATION_SETTINGS,
                 "Notifications are turned off",
-                "Turn on notifications for My Personal Notebook in Android settings. A geofence cannot show its alert while notifications are blocked.",
+                "Turn on notifications for NAHIAN'S NOTEBOOK in Android settings. A geofence cannot show its alert while notifications are blocked.",
                 "Open notification settings",
             )
         }

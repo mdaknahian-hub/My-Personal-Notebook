@@ -65,14 +65,14 @@ internal fun LocationReminderListScreen(
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Text("NAHIAN'S NOTEBOOK", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text(uiText("NAHIAN'S NOTEBOOK"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to summary")
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("Location Reminders", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("A useful nudge, right where you need it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(uiText("Location Reminders"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(uiText("A useful nudge, right where you need it."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onCreate) {
                     Icon(Icons.Filled.AddLocationAlt, contentDescription = "Create location reminder", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
@@ -99,8 +99,8 @@ internal fun LocationReminderListScreen(
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                             Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                                Text("Some reminders need attention", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text("Open or edit a reminder to see why it could not be registered.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text(uiText("Some reminders need attention"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text(uiText("Open or edit a reminder to see why it could not be registered."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                             }
                         }
                     }
@@ -111,8 +111,8 @@ internal fun LocationReminderListScreen(
             }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) {
-                    Text("Your reminders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Text("${reminders.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(uiText("Your reminders"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(uiText("${reminders.size}"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             if (reminders.isEmpty()) {
@@ -131,7 +131,7 @@ internal fun LocationReminderListScreen(
             }
             item {
                 Text(
-                    "Geofences are monitored by Android / Google Play services. Location reminders can work without mobile data after registration, but map tiles and place search need a network.",
+                    uiText("Geofences are monitored by Android / Google Play services. Location reminders can work without mobile data after registration, but map tiles and place search need a network."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
@@ -148,15 +148,16 @@ private fun OverviewCard(reminders: List<LocationReminder>) {
     Surface(color = MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(22.dp)) {
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("At the right place, at the right time", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
+                Text(uiText("At the right place, at the right time"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (active == 0) "Create a place-based reminder to get started."
+                    if (active == 0) uiText("Create a place-based reminder to get started.")
+                    else if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "Android-এ নিবন্ধিত সক্রিয় জিওফেন্স: $registered / $active"
                     else "$registered of $active active ${if (active == 1) "geofence" else "geofences"} registered with Android",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
                     modifier = Modifier.padding(top = 5.dp),
                 )
-                Text("No continuous GPS tracking", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f), modifier = Modifier.padding(top = 10.dp))
+                Text(uiText("No continuous GPS tracking"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f), modifier = Modifier.padding(top = 10.dp))
             }
             Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(42.dp))
         }
@@ -169,10 +170,10 @@ private fun PermissionIssueCard(issue: PermissionIssue, onAction: () -> Unit) {
         Column(Modifier.padding(15.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(issue.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 9.dp))
+                Text(uiText(issue.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 9.dp))
             }
-            Text(issue.explanation, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-            Button(onClick = onAction, modifier = Modifier.padding(top = 10.dp)) { Text(issue.actionLabel) }
+            Text(uiText(issue.explanation), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+            Button(onClick = onAction, modifier = Modifier.padding(top = 10.dp)) { Text(uiText(issue.actionLabel)) }
         }
     }
 }
@@ -183,10 +184,10 @@ private fun BatteryOptimizationCard(onOpenSettings: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.PowerSettingsNew, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                Text("Battery restrictions may delay alerts", style = MaterialTheme.typography.titleSmall)
-                Text("Android's geofence is low-power; some manufacturers still restrict background delivery.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText("Battery restrictions may delay alerts"), style = MaterialTheme.typography.titleSmall)
+                Text(uiText("Android's geofence is low-power; some manufacturers still restrict background delivery."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("Settings", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 2.dp))
+            Text(uiText("Settings"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 2.dp))
             IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.PowerSettingsNew, contentDescription = "Open battery settings") }
         }
     }
@@ -200,9 +201,9 @@ private fun EmptyState(onCreate: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(Icons.Filled.BookmarkBorder, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-            Text("Nothing pinned to a place yet", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
-            Text("Set a location, radius, trigger, and message. Android will notify you when the geofence transition happens.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-            Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) { Text("Create first reminder") }
+            Text(uiText("Nothing pinned to a place yet"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+            Text(uiText("Set a location, radius, trigger, and message. Android will notify you when the geofence transition happens."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) { Text(uiText("Create first reminder")) }
         }
     }
 }
@@ -230,7 +231,7 @@ private fun ReminderCard(
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text(reminder.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (reminder.enabled && reminder.registered) "Registered with Android" else if (reminder.enabled) "Needs attention" else "Disabled",
+                        uiText(if (reminder.enabled && reminder.registered) "Registered with Android" else if (reminder.enabled) "Needs attention" else "Disabled"),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (reminder.enabled && reminder.registered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -241,15 +242,18 @@ private fun ReminderCard(
             Text(reminder.message, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp))
             Row(modifier = Modifier.padding(top = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
-                Text("${radiusLabel(reminder.radiusMeters)} · ${triggerLabel(reminder.triggerType)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 5.dp))
+                Text("${radiusLabel(reminder.radiusMeters)} · ${uiText(triggerLabel(reminder.triggerType))}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 5.dp))
                 Spacer(Modifier.weight(1f))
                 Text(recurrenceLabel(reminder), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             reminder.registrationError?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+                Text(uiText(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
             }
             Text(
-                reminder.lastTriggeredAt?.let { "Last triggered ${formatTimestamp(it)}" } ?: "Last triggered: never",
+                reminder.lastTriggeredAt?.let {
+                    if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "সর্বশেষ চালু: ${formatTimestamp(it)}"
+                    else "Last triggered ${formatTimestamp(it)}"
+                } ?: uiText("Last triggered: never"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
@@ -273,7 +277,7 @@ private fun TextButtonIcon(label: String, icon: androidx.compose.ui.graphics.vec
     androidx.compose.material3.TextButton(onClick = onClick, modifier = modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall)
+            Text(uiText(label), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -287,11 +291,13 @@ private fun triggerLabel(value: String): String = when (TriggerType.fromStorage(
 }
 
 private fun recurrenceLabel(reminder: LocationReminder): String = when (RecurrenceType.fromStorage(reminder.recurrenceType)) {
-    RecurrenceType.ONCE -> "Once"
-    RecurrenceType.EVERY_VISIT -> "Every visit"
-    RecurrenceType.DAILY -> "Daily"
-    RecurrenceType.WEEKLY -> "Weekly"
-    RecurrenceType.CUSTOM -> "Every ${reminder.customIntervalDays} days"
+    RecurrenceType.ONCE -> uiText("Once")
+    RecurrenceType.EVERY_VISIT -> uiText("Every visit")
+    RecurrenceType.DAILY -> uiText("Daily")
+    RecurrenceType.WEEKLY -> uiText("Weekly")
+    RecurrenceType.CUSTOM -> if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) {
+        "${reminder.customIntervalDays} দিন পরপর"
+    } else "Every ${reminder.customIntervalDays} days"
 }
 
 private fun formatTimestamp(timestamp: Long): String = runCatching {

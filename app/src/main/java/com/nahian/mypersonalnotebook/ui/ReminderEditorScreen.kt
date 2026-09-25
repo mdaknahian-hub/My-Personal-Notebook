@@ -59,8 +59,8 @@ internal fun ReminderEditorScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Column(Modifier.weight(1f)) {
-                Text(if (draft.createdAt > 0) "Edit location reminder" else "New location reminder", style = MaterialTheme.typography.titleLarge)
-                Text("A system geofence, not background GPS tracking", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText(if (draft.createdAt > 0) "Edit location reminder" else "New location reminder"), style = MaterialTheme.typography.titleLarge)
+                Text(uiText("A system geofence, not background GPS tracking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -71,8 +71,8 @@ internal fun ReminderEditorScreen(
             OutlinedTextField(
                 value = draft.title,
                 onValueChange = { onChange(draft.copy(title = it)) },
-                label = { Text("Reminder title / location name") },
-                placeholder = { Text("e.g. Alpha Clothing Ltd.") },
+                label = { Text(uiText("Reminder title / location name")) },
+                placeholder = { Text(uiText("e.g. Alpha Clothing Ltd.")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -80,8 +80,8 @@ internal fun ReminderEditorScreen(
             OutlinedTextField(
                 value = draft.message,
                 onValueChange = { onChange(draft.copy(message = it)) },
-                label = { Text("Reminder message") },
-                placeholder = { Text("e.g. Packing Report জমা দিতে হবে") },
+                label = { Text(uiText("Reminder message")) },
+                placeholder = { Text(uiText("e.g. Packing Report জমা দিতে হবে")) },
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -90,7 +90,7 @@ internal fun ReminderEditorScreen(
                 SectionLabel("Location")
                 OutlinedButton(onClick = onChooseLocation, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Map, contentDescription = null)
-                    Text(if (draft.latitude == null || draft.longitude == null) "Choose location" else "Change / view on map", modifier = Modifier.padding(start = 8.dp))
+                    Text(uiText(if (draft.latitude == null || draft.longitude == null) "Choose location" else "Change / view on map"), modifier = Modifier.padding(start = 8.dp))
                 }
                 if (draft.latitude != null && draft.longitude != null) {
                     Card(
@@ -111,13 +111,13 @@ internal fun ReminderEditorScreen(
 
             Column {
                 SectionLabel("Geofence radius")
-                Text("A larger radius can improve reliability in dense areas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText("A larger radius can improve reliability in dense areas."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ReminderRules.allowedRadiiMeters.sorted().forEach { radius ->
                         FilterChip(
                             selected = draft.radiusMeters == radius,
                             onClick = { onChange(draft.copy(radiusMeters = radius)) },
-                            label = { Text(if (radius == 1_000) "1 km" else "$radius m") },
+                            label = { Text(uiText(if (radius == 1_000) "1 km" else "$radius m")) },
                             leadingIcon = if (draft.radiusMeters == radius) ({ Icon(Icons.Filled.Check, contentDescription = null) }) else null,
                         )
                     }
@@ -158,8 +158,8 @@ internal fun ReminderEditorScreen(
                     OutlinedTextField(
                         value = draft.customIntervalText,
                         onValueChange = { text -> onChange(draft.copy(customIntervalText = text.filter(Char::isDigit).take(3))) },
-                        label = { Text("Repeat every (days)") },
-                        supportingText = { Text("Choose 1–365 days. The app checks recurrence only when Android delivers a geofence transition.") },
+                        label = { Text(uiText("Repeat every (days)")) },
+                        supportingText = { Text(uiText("Choose 1–365 days. The app checks recurrence only when Android delivers a geofence transition.")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                     )
@@ -169,8 +169,8 @@ internal fun ReminderEditorScreen(
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Reminder active", style = MaterialTheme.typography.titleSmall)
-                        Text("Turn this off to keep it saved without registering a geofence.", style = MaterialTheme.typography.bodySmall)
+                        Text(uiText("Reminder active"), style = MaterialTheme.typography.titleSmall)
+                        Text(uiText("Turn this off to keep it saved without registering a geofence."), style = MaterialTheme.typography.bodySmall)
                     }
                     Switch(checked = draft.enabled, onCheckedChange = { onChange(draft.copy(enabled = it)) })
                 }
@@ -189,10 +189,10 @@ internal fun ReminderEditorScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TextButton(onClick = onCancel, modifier = Modifier.weight(1f), enabled = !isSaving) { Text("Cancel") }
+                TextButton(onClick = onCancel, modifier = Modifier.weight(1f), enabled = !isSaving) { Text(uiText("Cancel")) }
                 Button(onClick = onSave, modifier = Modifier.weight(1.3f), enabled = !isSaving) {
                     if (isSaving) androidx.compose.material3.CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp)
-                    else Text("Save reminder")
+                    else Text(uiText("Save reminder"))
                 }
             }
         }

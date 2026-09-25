@@ -15,24 +15,24 @@ import com.nahian.mypersonalnotebook.R
 import com.nahian.mypersonalnotebook.data.TimeReminder
 import com.nahian.mypersonalnotebook.reminders.TimeReminderActionReceiver
 import com.nahian.mypersonalnotebook.ui.MainActivity
+import com.nahian.mypersonalnotebook.ui.NotebookLanguage
+import com.nahian.mypersonalnotebook.ui.NotebookLanguageSettings
+import com.nahian.mypersonalnotebook.ui.uiText
 import java.text.DateFormat
 import java.util.Date
 
 object TimeReminderNotifications {
     const val CHANNEL_ID = "scheduled_reminders_high"
-    private const val CHANNEL_NAME = "Scheduled reminders"
-
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Notifications for reminders scheduled by date and time"
-                enableVibration(true)
-                setShowBadge(true)
-            },
-        )
+        val channel = manager.getNotificationChannel(CHANNEL_ID)
+            ?: NotificationChannel(CHANNEL_ID, uiText("Scheduled reminders"), NotificationManager.IMPORTANCE_HIGH)
+        channel.name = uiText("Scheduled reminders")
+        channel.description = uiText("Notifications for reminders scheduled by date and time")
+        channel.enableVibration(true)
+        channel.setShowBadge(true)
+        manager.createNotificationChannel(channel)
     }
 
     fun notificationPermissionIssue(context: Context): String? {
@@ -73,16 +73,16 @@ object TimeReminderNotifications {
             .setContentTitle(reminder.title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$body\n$timeText"))
-            .setSubText("Scheduled reminder")
+            .setSubText(uiText("Scheduled reminder"))
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setOnlyAlertOnce(false)
-            .addAction(0, "Done", actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_DONE))
-            .addAction(0, "Snooze 10 min", actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_SNOOZE))
-            .addAction(0, "Open", actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_OPEN))
+            .addAction(0, uiText("Done"), actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_DONE))
+            .addAction(0, uiText("Snooze 10 min"), actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_SNOOZE))
+            .addAction(0, uiText("Open"), actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_OPEN))
         return try {
             NotificationManagerCompat.from(context).notify(reminder.notificationId, builder.build())
             true

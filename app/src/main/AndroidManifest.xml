@@ -22,12 +22,27 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="true">
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".widget.NotebookWidgetProvider"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/notebook_widget_info" />
+        </receiver>
         <receiver
             android:name=".reminders.TimeReminderReceiver"
             android:enabled="true"

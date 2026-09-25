@@ -14,24 +14,21 @@ import androidx.core.content.ContextCompat
 import com.nahian.mypersonalnotebook.R
 import com.nahian.mypersonalnotebook.data.LocationReminder
 import com.nahian.mypersonalnotebook.ui.MainActivity
+import com.nahian.mypersonalnotebook.ui.NotebookLanguage
+import com.nahian.mypersonalnotebook.ui.NotebookLanguageSettings
+import com.nahian.mypersonalnotebook.ui.uiText
 
 object ReminderNotifications {
     const val CHANNEL_ID = "location_reminders_high"
-    private const val CHANNEL_NAME = "Location reminders"
-
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = "Alerts when you enter or leave places you selected"
-            enableVibration(true)
-            setShowBadge(true)
-        }
+        val channel = manager.getNotificationChannel(CHANNEL_ID)
+            ?: NotificationChannel(CHANNEL_ID, uiText("Location reminders"), NotificationManager.IMPORTANCE_HIGH)
+        channel.name = uiText("Location reminders")
+        channel.description = uiText("Alerts when you enter or leave places you selected")
+        channel.enableVibration(true)
+        channel.setShowBadge(true)
         manager.createNotificationChannel(channel)
     }
 
@@ -42,7 +39,7 @@ object ReminderNotifications {
             return "Allow notifications so Android can show location reminder alerts."
         }
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            return "Notifications are turned off for My Personal Notebook. Enable them in Android settings."
+            return "Notifications are turned off for NAHIAN'S NOTEBOOK. Enable them in Android settings."
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
@@ -69,13 +66,13 @@ object ReminderNotifications {
         )
 
         val displayMessage = when {
-            isTest -> "Test notification · ${reminder.message}"
+            isTest -> if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "পরীক্ষামূলক নোটিফিকেশন · ${reminder.message}" else "Test notification · ${reminder.message}"
             isSnoozed -> reminder.message
             else -> reminder.message
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Location Reminder")
+            .setContentTitle(uiText("Location Reminder"))
             .setContentText(displayMessage)
             .setStyle(NotificationCompat.BigTextStyle().bigText(displayMessage))
             .setSubText(reminder.title)
@@ -88,17 +85,17 @@ object ReminderNotifications {
 
         builder.addAction(
             0,
-            "Done",
+            uiText("Done"),
             actionPendingIntent(context, reminder, ReminderActionReceiver.ACTION_DONE),
         )
         builder.addAction(
             0,
-            "Snooze 10 min",
+            uiText("Snooze 10 min"),
             actionPendingIntent(context, reminder, ReminderActionReceiver.ACTION_SNOOZE),
         )
         builder.addAction(
             0,
-            "Open",
+            uiText("Open"),
             actionPendingIntent(context, reminder, ReminderActionReceiver.ACTION_OPEN),
         )
 

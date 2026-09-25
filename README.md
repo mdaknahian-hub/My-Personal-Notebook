@@ -1,47 +1,53 @@
-# My Personal Notebook — Android location-reminder slice
+# NAHIAN'S NOTEBOOK — Android app
 
-This repository was an empty Android-app scaffold. The current increment adds a dedicated native Android **Location Reminders** feature; the other notebook roadmap items (notes, sync, vault, widgets, web app, etc.) are not implemented yet.
+A native Android notebook and reminders app. It opens on a Summary dashboard and stores notes, checklists, and reminders locally on the device.
 
-## Location Reminders
+## Features implemented so far
 
-- Native Google Play services `GeofencingClient` / Android Geofencing API. The app does **not** run a foreground service or continuously poll GPS.
-- Create, edit, enable/disable, delete, map-preview, and test a reminder.
-- Location selection: one-shot current location, OpenStreetMap map pin, Android `Geocoder` search, and locally saved places.
-- Radius choices: 100 m, 200 m, 500 m, and 1 km.
-- Entry, exit, or either transition; Once, Every visit, Daily, Weekly, or custom every-N-days recurrence.
-- Local Room storage contains the requested reminder fields plus registration status/error and custom recurrence interval. Saved places are local too.
-- High-importance notification channel with Done, Snooze (10 minutes), and Open actions.
-- Boot, user-unlock, and package-replaced receivers rebuild enabled system geofences from Room. A Room migration policy is intentionally non-destructive; future schema versions must ship explicit migrations.
-- Permission explanations and Android settings links cover notification permission, precise foreground location, background “Allow all the time” location, disabled device Location, blocked notifications, unavailable Play services, and battery-optimization restrictions.
-- Registration failures are stored and visible on the reminder card rather than silently treated as registered.
+- **Notebook:** Create, edit, and delete local notes.
+- **Checklists:** Create lists, add items, tick items complete, and delete lists or items.
+- **Summary:** Opens on launch and shows notebook content and reminder counts.
+- **Time reminders:** One-time date-and-time alarms backed by Android `AlarmManager`, restored after reboot/app replacement. Notifications include Done, Snooze 10 min, and Open. Android may delay delivery depending on exact-alarm, notification, battery, and OS settings.
+- **Location reminders:** Native Google Play services `GeofencingClient` / Android Geofencing API. The app does **not** run a foreground service or continuously poll GPS.
+  - Create, edit, enable/disable, delete, map-preview, and test a reminder.
+  - Choose a one-shot current location, OpenStreetMap map pin, Android `Geocoder` search, or locally saved place.
+  - Radius choices: 100 m, 200 m, 500 m, and 1 km.
+  - Entry, exit, or either transition; Once, Every visit, Daily, Weekly, or custom every-N-days recurrence.
+  - Local Room storage contains reminder fields, registration status/error, and custom recurrence interval. Saved places are local too.
+  - Boot, user-unlock, and package-replaced receivers rebuild enabled system geofences from Room. Registration failures stay visible instead of being treated as success.
+- **Bangla and English:** Switch from the Summary top bar; the choice is saved on-device.
+- **Android launcher:** Long-press the app icon for Notes, Checklists, and Time reminders. A home-screen widget links to Summary, Notes, Checklists, and Time reminders.
+- **Branding:** Launcher name is **NAHIAN'S NOTEBOOK**, with a custom notebook icon.
+- **AI assistant:** Intentionally hidden/deferred until a secure integration can be provided.
 
 ## Install from an Android phone
 
-A cloud workflow builds a debug APK on pushes to `arena/01a0d731-my-personal-notebook` and keeps its downloadable artifact for seven days. No computer is needed to download it, but this APK is for Android only (not iPhone).
+A cloud workflow builds a debug APK on pushes to `arena/01a0d731-my-personal-notebook` and keeps its downloadable artifact for seven days. No computer is needed to download it; the APK is for Android only (not iPhone).
 
-1. On the phone, open the [latest Android debug workflow run](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/workflows/android-debug.yml?query=branch%3Aarena%2F01a0d731-my-personal-notebook). Sign in to GitHub if prompted, and open the newest run marked **Success**.
+1. On the phone, open the [Android debug workflow runs](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/workflows/android-debug.yml?query=branch%3Aarena%2F01a0d731-my-personal-notebook). Sign in to GitHub if prompted, and open the newest run marked **Success**.
 2. In **Artifacts**, tap **my-personal-notebook-debug-apk** to download the ZIP.
-3. Open the ZIP in the phone’s Files app and extract it. Tap `app-debug.apk` to install. If Android blocks it, allow **Install unknown apps** for the browser or Files app you used, then retry. Only install APKs downloaded from this repository’s workflow.
-4. Open **My Personal Notebook** and grant precise location, background location (**Allow all the time** where Android offers it), and notifications. Keep device Location and Google Play services enabled. If Android prompts for a Settings change, follow the in-app guidance.
-5. Start with a test reminder at a safe, nearby place you can revisit. Cross the selected boundary physically, allow for Android’s location delay, and check the notification actions. Avoid relying on a geofence firing instantly; Android controls transition timing.
+3. Open the ZIP in the phone's Files app and extract it. Tap `app-debug.apk` to install. If Android blocks it, allow **Install unknown apps** for the browser or Files app you used, then retry. Only install APKs downloaded from this repository's workflow.
+4. Open **NAHIAN'S NOTEBOOK**. Grant notifications when asked. For time reminders, enable **Alarms & reminders / exact alarms** in the in-app guidance. For location reminders, grant precise location and background location (**Allow all the time** where Android offers it), and keep device Location and Google Play services enabled.
+5. Start with a time reminder a few minutes ahead and a location reminder at a safe, nearby place you can revisit. Check notification actions and physically cross the selected geofence boundary. Android controls timing; neither alarms nor geofences should be assumed instant.
 
-The artifact expires after seven days. If the download is no longer listed, use the newest successful run. The cloud build and JVM tests passed in [run 36109155195](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36109155195), producing the APK artifact `my-personal-notebook-debug-apk`.
+The artifact expires after seven days. If it is no longer listed, use the newest successful run.
 
-## Build
+## Build and tests
 
-The app uses JDK 17, Android SDK Platform 35, Gradle 8.9, Android Gradle Plugin 8.7.3, Kotlin 2.0.21, and target SDK 35. The GitHub Actions workflow `.github/workflows/android-debug.yml` runs `:app:testDebugUnitTest` and `:app:assembleDebug`, then uploads the APK artifact. The local sandbox has no Java, Gradle, or Android SDK, so builds are performed in GitHub Actions rather than locally.
+The app uses JDK 17, Android SDK Platform 35, Gradle 8.9, Android Gradle Plugin 8.7.3, Kotlin 2.0.21, and target SDK 35. The GitHub Actions workflow `.github/workflows/android-debug.yml` runs `:app:testDebugUnitTest` and `:app:assembleDebug`, then uploads the APK artifact. This sandbox has no Java, Gradle, or Android SDK, so cloud CI is used for builds.
 
-Map tiles and geocoder search may require connectivity. Once registered, geofence monitoring is delegated to Android / Google Play services and may work temporarily without internet where the device supports it; notification timing and reliability remain subject to Android, Play services, device settings, and manufacturer battery policies.
+Map tiles and geocoder search may require connectivity. Once registered, geofence monitoring is delegated to Android / Google Play services and may work temporarily without internet where supported. Notification timing and reliability remain subject to Android, Play services, device settings, and manufacturer battery policies.
 
 ## Verification status
 
-The GitHub Actions run above passed the JVM unit tests and produced a debug APK. That verifies a cloud build, **not** real-device behavior. The feature is not being represented as complete or device-verified until it has been tested on an actual Android phone.
+Cloud unit tests and APK builds have passed for previous increments. This does **not** verify installation, alarm delivery, widget behavior, launcher shortcuts, language rendering, or geofencing on a real phone. Do not treat the app as complete until the current build is installed and tested on an actual Android device.
 
-Before release, test on real Android devices (including Android 10 and Android 11+ with Google Play services):
+Phone testing should cover:
 
-1. Grant precise location, background “Allow all the time,” and notification permission; create an Enter/Exit/Enter-or-Exit reminder and physically cross its selected radius.
-2. Verify the actual notification and Done/Snooze/Open actions; test the notification button separately.
-3. Repeat with the app backgrounded, swiped away, and screen locked; then repeat after a device reboot and first unlock.
-4. Repeat with mobile data unavailable after successful registration, and confirm actual behavior on each device.
-5. Exercise denied and permanently denied permissions, Location services off, notification channel blocked, battery optimization, Play services unavailable, and registration failure. Confirm each issue is visible and recoverable in Settings.
-6. Verify every recurrence type, duplicate/repeated transitions, disable/delete, app update, and invalid/stale saved coordinates.
+1. Notes and checklists: create, edit, complete, delete, app restart, and data persistence.
+2. Bangla/English switching, app-icon shortcuts, and adding/tapping the home-screen widget.
+3. Time reminders: near-future delivery, Done, Snooze, notification permission/channel blocking, exact-alarm denial, app background/locked, reboot, and OS/battery delay.
+4. Location reminders: enter/exit delivery, background/app-swiped-away/locked, reboot and first unlock, offline-after-registration, all recurrence types, duplicate transitions, disable/delete, app update, and stale saved coordinates.
+5. Permission recovery: precise/background location denied or permanently denied, Location services off, Play services unavailable, notification channel blocked, battery restrictions, and registration failure.
+
+The reported location-picker change is compiled but still needs real-device testing: selecting current location, map, search, or a saved place should return to the reminder form without an extra confirmation step (preview mode keeps its own confirmation).

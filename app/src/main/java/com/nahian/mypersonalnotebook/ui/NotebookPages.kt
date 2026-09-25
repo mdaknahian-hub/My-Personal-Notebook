@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -57,11 +58,13 @@ import com.nahian.mypersonalnotebook.data.ContentResult
 import com.nahian.mypersonalnotebook.data.NotebookChecklist
 import com.nahian.mypersonalnotebook.data.NotebookContentRepository
 import com.nahian.mypersonalnotebook.data.NotebookNote
+import com.nahian.mypersonalnotebook.data.TimeReminderRepository
 import kotlinx.coroutines.launch
 
 private enum class NotebookSection {
     SUMMARY,
     REMINDERS,
+    TIME_REMINDERS,
     CHECKLISTS,
     NOTES,
 }
@@ -70,6 +73,7 @@ private enum class NotebookSection {
 internal fun NotebookAppRoot(
     locationRepository: com.nahian.mypersonalnotebook.data.LocationReminderRepository,
     contentRepository: NotebookContentRepository,
+    timeReminderRepository: TimeReminderRepository,
     initialReminderId: String? = null,
 ) {
     var section by remember(initialReminderId) {
@@ -78,14 +82,17 @@ internal fun NotebookAppRoot(
     val reminders by locationRepository.observeReminders().collectAsState(initial = emptyList())
     val recentNotes by contentRepository.observeRecentNotes().collectAsState(initial = emptyList())
     val checklists by contentRepository.observeChecklists().collectAsState(initial = emptyList())
+    val timeReminders by timeReminderRepository.observeAll().collectAsState(initial = emptyList())
 
     when (section) {
         NotebookSection.SUMMARY -> NotebookSummaryScreen(
+            activeTimeReminders = timeReminders.count { it.enabled },
             activeLocationReminders = reminders.count { it.enabled },
             registeredLocationReminders = reminders.count { it.enabled && it.registered },
             checklists = checklists,
             recentNotes = recentNotes,
             onOpenReminders = { section = NotebookSection.REMINDERS },
+            onOpenTimeReminders = { section = NotebookSection.TIME_REMINDERS },
             onOpenChecklists = { section = NotebookSection.CHECKLISTS },
             onOpenNotes = { section = NotebookSection.NOTES },
         )
@@ -93,6 +100,10 @@ internal fun NotebookAppRoot(
             repository = locationRepository,
             initialReminderId = initialReminderId,
             onExit = { section = NotebookSection.SUMMARY },
+        )
+        NotebookSection.TIME_REMINDERS -> TimeRemindersScreen(
+            repository = timeReminderRepository,
+            onBack = { section = NotebookSection.SUMMARY },
         )
         NotebookSection.CHECKLISTS -> NotebookChecklistsScreen(
             repository = contentRepository,
@@ -108,11 +119,13 @@ internal fun NotebookAppRoot(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotebookSummaryScreen(
+    activeTimeReminders: Int,
     activeLocationReminders: Int,
     registeredLocationReminders: Int,
     checklists: List<ChecklistWithItems>,
     recentNotes: List<NotebookNote>,
     onOpenReminders: () -> Unit,
+    onOpenTimeReminders: () -> Unit,
     onOpenChecklists: () -> Unit,
     onOpenNotes: () -> Unit,
 ) {
@@ -139,14 +152,22 @@ private fun NotebookSummaryScreen(
                     Column(Modifier.fillMaxWidth().padding(20.dp)) {
                         Text("Summary", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                         Text(
-                            if (activeLocationReminders == 0 && outstandingItems == 0) "A calm place for your notes, plans, and reminders."
-                            else "You have $activeLocationReminders active location reminders and $outstandingItems checklist items left.",
+                            if (activeTimeReminders == 0 && activeLocationReminders == 0 && outstandingItems == 0) "A calm place for your notes, plans, and reminders."
+                            else "You have $activeTimeReminders scheduled and $activeLocationReminders active location reminders, with $outstandingItems checklist items left.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
+            }
+            item {
+                SummaryActionCard(
+                    title = "Time reminders",
+                    subtitle = if (activeTimeReminders == 0) "No scheduled reminders" else "$activeTimeReminders scheduled reminders",
+                    icon = { Icon(Icons.Filled.Alarm, contentDescription = null) },
+                    onClick = onOpenTimeReminders,
+                )
             }
             item {
                 SummaryActionCard(

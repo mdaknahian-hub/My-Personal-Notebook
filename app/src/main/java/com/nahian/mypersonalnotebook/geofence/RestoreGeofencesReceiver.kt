@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.nahian.mypersonalnotebook.data.LocationReminderRepository
+import com.nahian.mypersonalnotebook.data.TimeReminderRepository
 
 /** Enqueues durable work after reboot, unlock, or package replacement. */
 class RestoreGeofencesReceiver : BroadcastReceiver() {
@@ -41,6 +42,10 @@ class RestoreGeofencesWorker(context: Context, parameters: WorkerParameters) : C
             Log.w(TAG, "Geofence restore completed with issues: ${summary.errors.joinToString()}")
         } else {
             Log.i(TAG, "Restored ${summary.registeredCount} location geofences")
+        }
+        val timeErrors = TimeReminderRepository(applicationContext).restoreEnabledReminders()
+        if (timeErrors.isNotEmpty()) {
+            Log.w(TAG, "Scheduled reminders restored with issues: ${timeErrors.joinToString()}")
         }
         // Registration issues are persisted for the screen to show; do not spin/retry forever.
         Result.success()

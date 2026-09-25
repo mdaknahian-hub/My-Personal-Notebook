@@ -47,6 +47,7 @@ import com.nahian.mypersonalnotebook.data.LocationPoint
 import com.nahian.mypersonalnotebook.data.LocationReminder
 import com.nahian.mypersonalnotebook.data.LocationReminderRepository
 import com.nahian.mypersonalnotebook.data.NotebookContentRepository
+import com.nahian.mypersonalnotebook.data.TimeReminderRepository
 import com.nahian.mypersonalnotebook.data.OperationResult
 import com.nahian.mypersonalnotebook.data.ReminderDatabase
 import com.nahian.mypersonalnotebook.domain.ReminderRules
@@ -61,12 +62,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val repository = LocationReminderRepository(applicationContext, ReminderDatabase.get(applicationContext))
         val contentRepository = NotebookContentRepository(applicationContext)
+        val timeReminderRepository = TimeReminderRepository(applicationContext)
         val initialReminderId = intent.getStringExtra(EXTRA_REMINDER_ID)
         setContent {
             NotebookTheme {
                 NotebookAppRoot(
                     locationRepository = repository,
                     contentRepository = contentRepository,
+                    timeReminderRepository = timeReminderRepository,
                     initialReminderId = initialReminderId,
                 )
             }

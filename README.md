@@ -40,7 +40,7 @@ Map tiles and geocoder search may require connectivity. Once registered, geofenc
 
 ## Verification status
 
-Cloud unit tests and APK builds have passed for previous increments. This does **not** verify installation, alarm delivery, widget behavior, launcher shortcuts, language rendering, or geofencing on a real phone. Do not treat the app as complete until the current build is installed and tested on an actual Android device.
+The latest cloud run, [36125578170](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36125578170), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. This verifies compilation/tests, **not** installation, alarm delivery, widget behavior, launcher shortcuts, language rendering, or geofencing on a real phone. Do not treat the app as complete until the current build is installed and tested on an actual Android device.
 
 Phone testing should cover:
 

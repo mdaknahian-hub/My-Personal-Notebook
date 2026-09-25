@@ -15,15 +15,27 @@ This repository was an empty Android-app scaffold. The current increment adds a 
 - Permission explanations and Android settings links cover notification permission, precise foreground location, background “Allow all the time” location, disabled device Location, blocked notifications, unavailable Play services, and battery-optimization restrictions.
 - Registration failures are stored and visible on the reminder card rather than silently treated as registered.
 
+## Install from an Android phone
+
+A cloud workflow builds a debug APK on pushes to `arena/01a0d731-my-personal-notebook` and keeps its downloadable artifact for seven days. No computer is needed to download it, but this APK is for Android only (not iPhone).
+
+1. On the phone, open the [latest Android debug workflow run](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/workflows/android-debug.yml?query=branch%3Aarena%2F01a0d731-my-personal-notebook). Sign in to GitHub if prompted, and open the newest run marked **Success**.
+2. In **Artifacts**, tap **my-personal-notebook-debug-apk** to download the ZIP.
+3. Open the ZIP in the phone’s Files app and extract it. Tap `app-debug.apk` to install. If Android blocks it, allow **Install unknown apps** for the browser or Files app you used, then retry. Only install APKs downloaded from this repository’s workflow.
+4. Open **My Personal Notebook** and grant precise location, background location (**Allow all the time** where Android offers it), and notifications. Keep device Location and Google Play services enabled. If Android prompts for a Settings change, follow the in-app guidance.
+5. Start with a test reminder at a safe, nearby place you can revisit. Cross the selected boundary physically, allow for Android’s location delay, and check the notification actions. Avoid relying on a geofence firing instantly; Android controls transition timing.
+
+The artifact expires after seven days. If the download is no longer listed, use the newest successful run. The cloud build and JVM tests passed in [run 36109155195](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36109155195), producing the APK artifact `my-personal-notebook-debug-apk`.
+
 ## Build
 
-Open this project in Android Studio with JDK 17 and Android SDK Platform 35 installed. The app uses Gradle 8.9 / Android Gradle Plugin 8.7.3, Kotlin 2.0.21, and target SDK 35. This sandbox had no Java, Gradle, or Android SDK and could not download the official Gradle wrapper, so a Gradle build was not run here. Use Android Studio's Gradle setup or install Gradle 8.9 locally to sync/build the project.
+The app uses JDK 17, Android SDK Platform 35, Gradle 8.9, Android Gradle Plugin 8.7.3, Kotlin 2.0.21, and target SDK 35. The GitHub Actions workflow `.github/workflows/android-debug.yml` runs `:app:testDebugUnitTest` and `:app:assembleDebug`, then uploads the APK artifact. The local sandbox has no Java, Gradle, or Android SDK, so builds are performed in GitHub Actions rather than locally.
 
 Map tiles and geocoder search may require connectivity. Once registered, geofence monitoring is delegated to Android / Google Play services and may work temporarily without internet where the device supports it; notification timing and reliability remain subject to Android, Play services, device settings, and manufacturer battery policies.
 
 ## Verification status
 
-Pure JVM tests are included for coordinate/radius validation, trigger filtering, and recurrence gates. They have not been executed in this environment. This feature has **not** been tested on a real Android device, so it is not being represented as complete or device-verified.
+The GitHub Actions run above passed the JVM unit tests and produced a debug APK. That verifies a cloud build, **not** real-device behavior. The feature is not being represented as complete or device-verified until it has been tested on an actual Android phone.
 
 Before release, test on real Android devices (including Android 10 and Android 11+ with Google Play services):
 

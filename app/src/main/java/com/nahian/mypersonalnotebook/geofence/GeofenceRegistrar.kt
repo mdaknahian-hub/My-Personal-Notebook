@@ -191,10 +191,9 @@ object GeofenceRegistrar {
     private fun geofencePendingIntent(context: Context): PendingIntent {
         val intent = Intent(context, GeofenceTransitionReceiver::class.java)
             .setAction(ACTION_GEOFENCE_TRANSITION)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Play services must attach transition extras to this explicit receiver intent.
-            PendingIntent.FLAG_MUTABLE
-        } else 0
+        // Play services must attach transition extras to this explicit receiver intent on Android 12+.
+        val mutabilityFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag
         return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
     }
 

@@ -7,6 +7,9 @@ A native Android notebook and reminders app. It opens on a Summary dashboard and
 - **Notebook:** Create, edit, and delete local notes.
 - **Checklists:** Create lists, add items, tick items complete, and delete lists or items.
 - **Summary:** Opens on launch and shows notebook content and reminder counts.
+- **Profile and settings:** A local profile name personalizes the Summary; name and appearance are stored on-device, with no account or cloud sync.
+- **Premium appearance:** Dark charcoal, sage, and warm-gold palette is the default; Light and System themes are also selectable.
+- **Navigation and motion:** A five-item bottom bar links the main areas and a reminder hub separates time and location reminders. Screen transitions use subtle fades/slides.
 - **Time reminders:** One-time date-and-time alarms backed by Android `AlarmManager`, restored after reboot/app replacement. Notifications include Done, Snooze 10 min, and Open. Android may delay delivery depending on exact-alarm, notification, battery, and OS settings.
 - **Location reminders:** Native Google Play services `GeofencingClient` / Android Geofencing API. The app does **not** run a foreground service or continuously poll GPS.
   - Create, edit, enable/disable, delete, map-preview, and test a reminder.
@@ -15,7 +18,8 @@ A native Android notebook and reminders app. It opens on a Summary dashboard and
   - Entry, exit, or either transition; Once, Every visit, Daily, Weekly, or custom every-N-days recurrence.
   - Local Room storage contains reminder fields, registration status/error, and custom recurrence interval. Saved places are local too.
   - Boot, user-unlock, and package-replaced receivers rebuild enabled system geofences from Room. Registration failures stay visible instead of being treated as success.
-- **Bangla and English:** Switch from the Summary top bar; the choice is saved on-device.
+- **Bangla and English:** Switch from the Summary top bar or Settings; the choice is saved on-device.
+- **Voice commands:** Bangla and English speech can open the main app sections. Recognition is delegated to Android's speech service; this app does not save audio, and offline recognition depends on the device.
 - **Android launcher:** Long-press the app icon for Notes, Checklists, and Time reminders. A home-screen widget links to Summary, Notes, Checklists, and Time reminders.
 - **Branding:** Launcher name is **NAHIAN'S NOTEBOOK**, with a custom notebook icon.
 - **AI assistant:** Intentionally hidden/deferred until a secure integration can be provided.
@@ -45,7 +49,7 @@ The verified code build, [36126432233](https://github.com/mdaknahian-hub/My-Pers
 Phone testing should cover:
 
 1. Notes and checklists: create, edit, complete, delete, app restart, and data persistence.
-2. Bangla/English switching, app-icon shortcuts, and adding/tapping the home-screen widget.
+2. Profile-name persistence, Dark/Light/System theme switching, Bangla/English switching, bottom navigation, voice commands, app-icon shortcuts, and the home-screen widget.
 3. Time reminders: near-future delivery, Done, Snooze, notification permission/channel blocking, exact-alarm denial, app background/locked, reboot, and OS/battery delay.
 4. Location reminders: enter/exit delivery, background/app-swiped-away/locked, reboot and first unlock, offline-after-registration, all recurrence types, duplicate transitions, disable/delete, app update, and stale saved coordinates.
 5. Permission recovery: precise/background location denied or permanently denied, Location services off, Play services unavailable, notification channel blocked, battery restrictions, and registration failure.

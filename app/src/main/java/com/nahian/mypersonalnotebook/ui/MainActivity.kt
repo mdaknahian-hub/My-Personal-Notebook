@@ -66,14 +66,21 @@ class MainActivity : ComponentActivity() {
         val initialReminderId = intent.getStringExtra(EXTRA_REMINDER_ID)
         val initialOpenSection = intent.getStringExtra(EXTRA_OPEN_SECTION)
         NotebookLanguageSettings.load(applicationContext)
+        val initialAppSettings = NotebookAppSettingsStore.load(applicationContext)
         setContent {
-            NotebookTheme {
+            var themeMode by remember { mutableStateOf(initialAppSettings.themeMode) }
+            NotebookTheme(mode = themeMode) {
                 NotebookAppRoot(
                     locationRepository = repository,
                     contentRepository = contentRepository,
                     timeReminderRepository = timeReminderRepository,
                     initialReminderId = initialReminderId,
                     initialOpenSection = initialOpenSection,
+                    themeMode = themeMode,
+                    onThemeModeChange = { selectedMode ->
+                        themeMode = selectedMode
+                        NotebookAppSettingsStore.saveThemeMode(applicationContext, selectedMode)
+                    },
                 )
             }
         }
@@ -95,6 +102,8 @@ internal fun LocationReminderApp(
     repository: LocationReminderRepository,
     initialReminderId: String?,
     onExit: () -> Unit,
+    onPrimaryNavigationVisibilityChange: (Boolean) -> Unit = {},
+    onInitialReminderHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
@@ -121,6 +130,10 @@ internal fun LocationReminderApp(
     var pickerTab by remember { mutableIntStateOf(0) }
     var isSaving by remember { mutableStateOf(false) }
     var reminderToDelete by remember { mutableStateOf<LocationReminder?>(null) }
+
+    LaunchedEffect(draft, pickerMode) {
+        onPrimaryNavigationVisibilityChange(draft == null && pickerMode == null)
+    }
 
     BackHandler(enabled = true) {
         when {
@@ -189,6 +202,7 @@ internal fun LocationReminderApp(
                 draft = requestedReminder.toDraft()
                 pickerMode = null
                 initialNavigationHandled = true
+                onInitialReminderHandled()
             }
         }
     }

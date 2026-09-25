@@ -1,5 +1,20 @@
 package com.nahian.mypersonalnotebook.ui
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,7 +38,10 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,6 +52,8 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -62,15 +82,19 @@ import com.nahian.mypersonalnotebook.data.NotebookChecklist
 import com.nahian.mypersonalnotebook.data.NotebookContentRepository
 import com.nahian.mypersonalnotebook.data.NotebookNote
 import com.nahian.mypersonalnotebook.data.TimeReminderRepository
+import com.nahian.mypersonalnotebook.domain.NotebookVoiceCommands
+import com.nahian.mypersonalnotebook.domain.NotebookVoiceDestination
 import com.nahian.mypersonalnotebook.widget.NotebookWidgetProvider
 import kotlinx.coroutines.launch
 
 private enum class NotebookSection {
     SUMMARY,
     REMINDERS,
+    LOCATION_REMINDERS,
     TIME_REMINDERS,
     CHECKLISTS,
     NOTES,
+    SETTINGS,
 }
 
 @Composable
@@ -80,23 +104,33 @@ internal fun NotebookAppRoot(
     timeReminderRepository: TimeReminderRepository,
     initialReminderId: String? = null,
     initialOpenSection: String? = null,
+    themeMode: NotebookThemeMode,
+    onThemeModeChange: (NotebookThemeMode) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val voiceSnackbar = remember { SnackbarHostState() }
     var language by remember { mutableStateOf(NotebookLanguageSettings.current) }
+    var profileName by remember { mutableStateOf(NotebookAppSettingsStore.profileName) }
+    var pendingReminderId by remember(initialReminderId) { mutableStateOf(initialReminderId) }
+    var locationNavigationVisible by remember { mutableStateOf(true) }
     var section by remember(initialReminderId, initialOpenSection) {
         mutableStateOf(
             when {
-                initialReminderId != null -> NotebookSection.REMINDERS
+                initialReminderId != null -> NotebookSection.LOCATION_REMINDERS
                 initialOpenSection == MainActivity.SECTION_NOTES -> NotebookSection.NOTES
                 initialOpenSection == MainActivity.SECTION_CHECKLISTS -> NotebookSection.CHECKLISTS
                 initialOpenSection == MainActivity.SECTION_TIME_REMINDERS -> NotebookSection.TIME_REMINDERS
-                initialOpenSection == MainActivity.SECTION_LOCATION_REMINDERS -> NotebookSection.REMINDERS
+                initialOpenSection == MainActivity.SECTION_LOCATION_REMINDERS -> NotebookSection.LOCATION_REMINDERS
                 else -> NotebookSection.SUMMARY
             },
         )
     }
-    BackHandler(enabled = section != NotebookSection.SUMMARY && section != NotebookSection.REMINDERS) {
-        section = NotebookSection.SUMMARY
+    BackHandler(enabled = section != NotebookSection.SUMMARY) {
+        section = when (section) {
+            NotebookSection.TIME_REMINDERS, NotebookSection.LOCATION_REMINDERS -> NotebookSection.REMINDERS
+            else -> NotebookSection.SUMMARY
+        }
     }
     val reminders by locationRepository.observeReminders().collectAsState(initial = emptyList())
     val recentNotes by contentRepository.observeRecentNotes().collectAsState(initial = emptyList())
@@ -110,39 +144,162 @@ internal fun NotebookAppRoot(
         NotebookWidgetProvider.refresh(context)
     }
 
-    key(language) {
-        when (section) {
-        NotebookSection.SUMMARY -> NotebookSummaryScreen(
-            language = language,
-            onToggleLanguage = ::toggleLanguage,
-            activeTimeReminders = timeReminders.count { it.enabled },
-            activeLocationReminders = reminders.count { it.enabled },
-            registeredLocationReminders = reminders.count { it.enabled && it.registered },
-            checklists = checklists,
-            recentNotes = recentNotes,
-            onOpenReminders = { section = NotebookSection.REMINDERS },
-            onOpenTimeReminders = { section = NotebookSection.TIME_REMINDERS },
-            onOpenChecklists = { section = NotebookSection.CHECKLISTS },
-            onOpenNotes = { section = NotebookSection.NOTES },
-        )
-        NotebookSection.REMINDERS -> LocationReminderApp(
-            repository = locationRepository,
-            initialReminderId = initialReminderId,
-            onExit = { section = NotebookSection.SUMMARY },
-        )
-        NotebookSection.TIME_REMINDERS -> TimeRemindersScreen(
-            repository = timeReminderRepository,
-            onBack = { section = NotebookSection.SUMMARY },
-        )
-        NotebookSection.CHECKLISTS -> NotebookChecklistsScreen(
-            repository = contentRepository,
-            onBack = { section = NotebookSection.SUMMARY },
-        )
-        NotebookSection.NOTES -> NotebookNotesScreen(
-            repository = contentRepository,
-            onBack = { section = NotebookSection.SUMMARY },
-        )
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val transcript = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            val destination = transcript?.let { NotebookVoiceCommands.destinationFor(it) }
+            if (destination == null) {
+                scope.launch { voiceSnackbar.showSnackbar(uiText("Command not recognized. Try saying open notes.")) }
+            } else {
+                section = when (destination) {
+                    NotebookVoiceDestination.SUMMARY -> NotebookSection.SUMMARY
+                    NotebookVoiceDestination.NOTES -> NotebookSection.NOTES
+                    NotebookVoiceDestination.CHECKLISTS -> NotebookSection.CHECKLISTS
+                    NotebookVoiceDestination.REMINDERS -> NotebookSection.REMINDERS
+                    NotebookVoiceDestination.TIME_REMINDERS -> NotebookSection.TIME_REMINDERS
+                    NotebookVoiceDestination.LOCATION_REMINDERS -> NotebookSection.LOCATION_REMINDERS
+                    NotebookVoiceDestination.SETTINGS -> NotebookSection.SETTINGS
+                }
+                scope.launch { voiceSnackbar.showSnackbar(uiText("Voice command opened a screen.")) }
+            }
         }
+    }
+
+    fun startVoiceCommand() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (language == NotebookLanguage.BANGLA) "bn-BD" else "en-US")
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, uiText("Say a command like open notes."))
+        }
+        try {
+            voiceLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            scope.launch { voiceSnackbar.showSnackbar(uiText("Voice recognition is unavailable on this device.")) }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AnimatedContent(
+                targetState = section,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    (fadeIn(tween(190)) + slideInHorizontally(tween(190)) { it / 18 }) togetherWith
+                        (fadeOut(tween(130)) + slideOutHorizontally(tween(130)) { -it / 18 })
+                },
+                label = "notebook section transition",
+            ) { destination ->
+                key(language) {
+                    when (destination) {
+                        NotebookSection.SUMMARY -> NotebookSummaryScreen(
+                            language = language,
+                            displayName = profileName,
+                            onToggleLanguage = ::toggleLanguage,
+                            onOpenSettings = { section = NotebookSection.SETTINGS },
+                            onVoiceCommand = ::startVoiceCommand,
+                            activeTimeReminders = timeReminders.count { it.enabled },
+                            activeLocationReminders = reminders.count { it.enabled },
+                            registeredLocationReminders = reminders.count { it.enabled && it.registered },
+                            checklists = checklists,
+                            recentNotes = recentNotes,
+                            onOpenReminders = { section = NotebookSection.LOCATION_REMINDERS },
+                            onOpenTimeReminders = { section = NotebookSection.TIME_REMINDERS },
+                            onOpenChecklists = { section = NotebookSection.CHECKLISTS },
+                            onOpenNotes = { section = NotebookSection.NOTES },
+                        )
+                        NotebookSection.REMINDERS -> NotebookReminderHubScreen(
+                            onOpenTimeReminders = { section = NotebookSection.TIME_REMINDERS },
+                            onOpenLocationReminders = { section = NotebookSection.LOCATION_REMINDERS },
+                        )
+                        NotebookSection.LOCATION_REMINDERS -> LocationReminderApp(
+                            repository = locationRepository,
+                            initialReminderId = pendingReminderId,
+                            onExit = { section = NotebookSection.REMINDERS },
+                            onPrimaryNavigationVisibilityChange = { locationNavigationVisible = it },
+                            onInitialReminderHandled = { pendingReminderId = null },
+                        )
+                        NotebookSection.TIME_REMINDERS -> TimeRemindersScreen(
+                            repository = timeReminderRepository,
+                            onBack = { section = NotebookSection.REMINDERS },
+                        )
+                        NotebookSection.CHECKLISTS -> NotebookChecklistsScreen(
+                            repository = contentRepository,
+                            onBack = { section = NotebookSection.SUMMARY },
+                        )
+                        NotebookSection.NOTES -> NotebookNotesScreen(
+                            repository = contentRepository,
+                            onBack = { section = NotebookSection.SUMMARY },
+                        )
+                        NotebookSection.SETTINGS -> NotebookSettingsScreen(
+                            profileName = profileName,
+                            themeMode = themeMode,
+                            language = language,
+                            onSaveProfile = { name ->
+                                NotebookAppSettingsStore.saveProfileName(context, name)
+                                profileName = NotebookAppSettingsStore.profileName
+                            },
+                            onThemeModeChange = onThemeModeChange,
+                            onToggleLanguage = ::toggleLanguage,
+                            onVoiceCommand = ::startVoiceCommand,
+                        )
+                    }
+                }
+            }
+            SnackbarHost(
+                hostState = voiceSnackbar,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+            )
+        }
+        if (locationNavigationVisible || section != NotebookSection.LOCATION_REMINDERS) {
+            NotebookNavigationBar(
+                section = section,
+                onSelect = { section = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotebookNavigationBar(section: NotebookSection, onSelect: (NotebookSection) -> Unit) {
+    val selectedSection = when (section) {
+        NotebookSection.SUMMARY -> NotebookSection.SUMMARY
+        NotebookSection.NOTES -> NotebookSection.NOTES
+        NotebookSection.CHECKLISTS -> NotebookSection.CHECKLISTS
+        NotebookSection.REMINDERS, NotebookSection.TIME_REMINDERS, NotebookSection.LOCATION_REMINDERS -> NotebookSection.REMINDERS
+        NotebookSection.SETTINGS -> NotebookSection.SETTINGS
+    }
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+        NavigationBarItem(
+            selected = selectedSection == NotebookSection.SUMMARY,
+            onClick = { onSelect(NotebookSection.SUMMARY) },
+            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+            label = { Text(uiText("Summary")) },
+        )
+        NavigationBarItem(
+            selected = selectedSection == NotebookSection.NOTES,
+            onClick = { onSelect(NotebookSection.NOTES) },
+            icon = { Icon(Icons.Filled.MenuBook, contentDescription = null) },
+            label = { Text(uiText("Notes")) },
+        )
+        NavigationBarItem(
+            selected = selectedSection == NotebookSection.CHECKLISTS,
+            onClick = { onSelect(NotebookSection.CHECKLISTS) },
+            icon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
+            label = { Text(uiText("Checklists")) },
+        )
+        NavigationBarItem(
+            selected = selectedSection == NotebookSection.REMINDERS,
+            onClick = { onSelect(NotebookSection.REMINDERS) },
+            icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = null) },
+            label = { Text(uiText("Reminders")) },
+        )
+        NavigationBarItem(
+            selected = selectedSection == NotebookSection.SETTINGS,
+            onClick = { onSelect(NotebookSection.SETTINGS) },
+            icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+            label = { Text(uiText("Settings")) },
+        )
     }
 }
 
@@ -150,7 +307,10 @@ internal fun NotebookAppRoot(
 @Composable
 private fun NotebookSummaryScreen(
     language: NotebookLanguage,
+    displayName: String,
     onToggleLanguage: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onVoiceCommand: () -> Unit,
     activeTimeReminders: Int,
     activeLocationReminders: Int,
     registeredLocationReminders: Int,
@@ -167,16 +327,27 @@ private fun NotebookSummaryScreen(
         language == NotebookLanguage.BANGLA -> "আপনার ${activeTimeReminders}টি সময়ভিত্তিক ও ${activeLocationReminders}টি সক্রিয় অবস্থানভিত্তিক রিমাইন্ডার আছে; চেকলিস্টে ${outstandingItems}টি আইটেম বাকি।"
         else -> "You have $activeTimeReminders scheduled and $activeLocationReminders active location reminders, with $outstandingItems checklist items left."
     }
+    val welcomeText = when {
+        displayName.isBlank() -> uiText("Your day, in one place")
+        language == NotebookLanguage.BANGLA -> "স্বাগতম, $displayName"
+        else -> "Welcome back, $displayName"
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text(uiText("NAHIAN'S NOTEBOOK"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(uiText("Your day, in one place"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(welcomeText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 actions = {
+                    IconButton(onClick = onVoiceCommand) {
+                        Icon(Icons.Filled.Mic, contentDescription = uiText("Voice command"))
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = uiText("Settings"))
+                    }
                     TextButton(onClick = onToggleLanguage) {
                         Text(if (language == NotebookLanguage.ENGLISH) "বাংলা" else "English")
                     }

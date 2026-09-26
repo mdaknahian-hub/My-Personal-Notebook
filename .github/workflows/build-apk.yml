@@ -133,10 +133,13 @@ jobs:
       - name: APK + AAB বিল্ড
         run: |
           set +e
-          ./scripts/apk/node_modules/.bin/bubblewrap build \
-            --manifest ./twa/twa-manifest.json \
-            --directory ./twa \
-            --config ./bw-config.json 2>&1 | tee bw-build.log
+          BUBBLEWRAP="$PWD/scripts/apk/node_modules/.bin/bubblewrap"
+          cd twa
+          chmod +x ./gradlew
+          "$BUBBLEWRAP" build \
+            --manifest ./twa-manifest.json \
+            --directory ./ \
+            --config ../bw-config.json 2>&1 | tee bw-build.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
             echo "## Bubblewrap বিল্ড ব্যর্থ (exit $code)" >> "$GITHUB_STEP_SUMMARY"

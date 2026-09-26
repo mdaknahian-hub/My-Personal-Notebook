@@ -121,6 +121,13 @@ if (!existsSync(keystorePath)) {
   console.log("→ আগের সাইনিং কী-ই ব্যবহার হচ্ছে:", keystorePath);
 }
 
+// --- ডায়াগনস্টিক ডাম্প ---
+console.log("  host     :", JSON.stringify(twa.host));
+console.log("  startUrl :", JSON.stringify(twa.startUrl));
+console.log("  iconUrl  :", JSON.stringify(twa.iconUrl ?? null));
+console.log("  maskable :", JSON.stringify(twa.maskableIconUrl ?? null));
+console.log("  shortcuts:", twa.shortcuts?.length ?? 0);
+
 // --- প্রজেক্ট তৈরি ---
 await mkdir(outDir, { recursive: true });
 const manifestFile = join(outDir, "twa-manifest.json");

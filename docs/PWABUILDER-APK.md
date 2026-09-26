@@ -36,6 +36,14 @@ npm run build        # প্রোডাকশন বিল্ড সফল হ
 
 ### ১.১ — Render-এ ডিপ্লয় (সুপারিশকৃত)
 
+> ⚡ **দ্রুত পথ:** নিচের বাটনে চাপ দিন — `render.yaml` থেকে সব সেটিং নিজে থেকে বসবে।
+> রিপো সিলেক্টের সময় ব্রাঞ্চ হিসেবে `arena/01a0dc24-my-personal-notebook` বেছে নিন
+> (অথবা PR মার্জ করে `main` থেকে ডিপ্লয় করুন)।
+>
+> [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mdaknahian-hub/My-Personal-Notebook)
+>
+> হাতে করতে চাইলে:
+
 1. কোড GitHub-এ পুশ করুন (`arena/01a0dc24-my-personal-notebook` ব্রাঞ্চ বা `main`-এ মার্জ করে)।
 2. [render.com](https://render.com) → **New → Web Service** → রিপো সিলেক্ট করুন।
 3. সেটিংস:

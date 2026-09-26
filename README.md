@@ -108,6 +108,10 @@ npm run build       # প্রোডাকশন বিল্ড
 # → PWABuilder.com-এ URL দিয়ে Android APK/AAB ডাউনলোড
 ```
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mdaknahian-hub/My-Personal-Notebook)
+
+> বাটনে চাপ দিলে Render-এ রিপো সিলেক্ট করে **Apply** চাপুন — `render.yaml` থেকে সব সেটিং (Docker + ডিস্ক + সিক্রেট) নিজে থেকে বসে যাবে। ডিপ্লয় শেষে যে URL পাবেন (যেমন `https://dokan-hishab.onrender.com`), সেটা চ্যাটে পাঠান — আমি APK বানিয়ে দেব।
+
 এরপর অ্যাপের আইকন থেকে খুললে সেটি সাধারণ অ্যাপের মতোই সার্ভিস দেবে
 (standalone, নিজস্ব আইকন, দ্রুত লোড, অফলাইন সাপোর্ট)।
 

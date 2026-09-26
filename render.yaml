@@ -1,0 +1,19 @@
+# Render Blueprint — এক-ক্লিকে ডিপ্লয় ("Deploy to Render" বাটনে চাপ দিলেই চলবে)
+# ডক্স: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: dokan-hishab
+    runtime: docker
+    # ডিস্ক (SQLite ডেটা টিকিয়ে রাখতে) Starter প্ল্যান থেকে শুরু।
+    # শুধু ডেমো দেখতে চাইলে plan: free + disk অংশ মুছে দিন (তবে রিডিপ্লয়ে হিসাব মুছবে!)
+    plan: starter
+    healthCheckPath: /api/ping
+    envVars:
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: /data/dokan.db
+    disk:
+      name: dokan-data
+      mountPath: /data
+      sizeGB: 1

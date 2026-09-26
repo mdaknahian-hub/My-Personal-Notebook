@@ -24,9 +24,11 @@ deploymentTargetDropDown.xml
 experiment.xml
 misc.xml
 
-# Keystore files
+# Keystore files (Android legacy)
 *.jks
-*.keystore
+# NOTE: দোকানের APK সাইনিং কী `android-signing/*.keystore` ইচ্ছে করে
+# রিপোতে রাখা হয় (হারালে অ্যাপ আপডেট করা যাবে না) — রিপো প্রাইভেট রাখুন!
+!android-signing/*.keystore
 
 # Google Services (e.g. Firebase)
 google-services.json
@@ -54,6 +56,10 @@ data/*.db-shm
 .env
 .env.local
 .env*.local
+
+# ---------------- APK build (generated) ----------------
+twa/
+bw-config.json
 
 # ---------------- Misc ----------------
 .DS_Store

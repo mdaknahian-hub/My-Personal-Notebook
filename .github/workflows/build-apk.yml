@@ -1,0 +1,119 @@
+# দোকান হিসাব — Android APK/AAB বিল্ড (PWA → TWA, Bubblewrap দিয়ে)
+#
+# চালানো (GitHub UI → Actions → Build APK → Run workflow, অথবা CLI):
+#   gh workflow run build-apk.yml --ref <branch> -f url=https://dokan-hishab.onrender.com
+#
+# ⚠️ সাইনিং কী: প্রথম রানে `android-signing/dokan-release.keystore` তৈরি হয়ে
+# রিপোতেই কমিট হয়, পরের সব বিল্ড একই কী-তে সাইন হয় (আপডেট কাজ করে)।
+# এই রিপো প্রাইভেট রাখুন — কী হারালে/ফাঁস হলে অ্যাপ আপডেট করা যাবে না।
+# পাসওয়ার্ড নিচে KEYSTORE_PASSWORD-এ (বদলালে আগের কী বাতিল হয়ে যাবে!)
+
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "হোস্ট করা PWA-র URL (https://...)"
+        required: true
+        type: string
+      version:
+        description: "ভার্সন নাম (যেমন 1.0.0)"
+        required: false
+        default: "1.0.0"
+        type: string
+      package_id:
+        description: "Android Package ID"
+        required: false
+        default: "com.dokanhishab.app"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE_ID: ${{ inputs.package_id }}
+  VERSION_NAME: ${{ inputs.version }}
+  KEYSTORE_FILE: android-signing/dokan-release.keystore
+  KEY_ALIAS: dokan
+  # --- সাইনিং পাসওয়ার্ড (৬+ অক্ষর হতে হবে) ---
+  BUBBLEWRAP_KEYSTORE_PASSWORD: DokanHishab-2026-Sign
+  BUBBLEWRAP_KEY_PASSWORD: DokanHishab-2026-Sign
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: কোড নিন
+        uses: actions/checkout@v4
+
+      - name: JDK 17 বসান
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Node 22 বসান
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Bubblewrap CLI ইনস্টল
+        run: npm --prefix scripts/apk install --no-save @bubblewrap/cli
+
+      - name: TWA প্রজেক্ট তৈরি
+        run: |
+          node scripts/apk/generate-twa.mjs \
+            --url "${{ inputs.url }}" \
+            --out twa \
+            --package-id "$PACKAGE_ID" \
+            --version-name "$VERSION_NAME" \
+            --version-code "${{ github.run_number }}" \
+            --keystore "$KEYSTORE_FILE" \
+            --key-alias "$KEY_ALIAS"
+
+      - name: সাইনিং কী রিপোতে সংরক্ষণ (প্রথমবার)
+        run: |
+          git config user.name "apk-builder[bot]"
+          git config user.email "apk-builder[bot]@users.noreply.github.com"
+          git add -f "$KEYSTORE_FILE"
+          if git diff --cached --quiet; then
+            echo "আগের কী-ই আছে — কমিট লাগবে না"
+          else
+            git commit -m "প্রথম APK সাইনিং কী সংরক্ষণ (আপডেটের জন্য রাখুন!)"
+            git push
+          fi
+
+      - name: Bubblewrap কনফিগ লিখুন
+        run: |
+          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > bw-config.json
+          cat bw-config.json
+
+      - name: APK + AAB বিল্ড
+        run: |
+          ./scripts/apk/node_modules/.bin/bubblewrap build \
+            --manifest ./twa/twa-manifest.json \
+            --directory ./twa \
+            --config ./bw-config.json
+
+      - name: SHA-256 ফিঙ্গারপ্রিন্ট বের করুন
+        run: |
+          "$JAVA_HOME/bin/keytool" -list -v \
+            -keystore "$KEYSTORE_FILE" -alias "$KEY_ALIAS" \
+            -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | tee fingerprints.txt
+          SHA256=$(grep -m1 "SHA256:" fingerprints.txt | awk '{print $2}')
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"%s","sha256_cert_fingerprints":["%s"]}}]' \
+            "$PACKAGE_ID" "$SHA256" > assetlinks.json
+          echo "ফিঙ্গারপ্রিন্ট: $SHA256"
+
+      - name: আর্টিফ্যাক্ট আপলোড (APK/AAB)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dokan-hishab-v${{ inputs.version }}-${{ github.run_number }}
+          path: |
+            twa/app-release-signed.apk
+            twa/app-release-bundle.aab
+            fingerprints.txt
+            assetlinks.json
+          retention-days: 30

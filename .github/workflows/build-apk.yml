@@ -134,6 +134,9 @@ jobs:
         run: |
           set +e
           BUBBLEWRAP="$PWD/scripts/apk/node_modules/.bin/bubblewrap"
+          # runner-এর ANDROID_SDK_ROOT আর Bubblewrap-এর ANDROID_HOME একসাথে
+          # থাকলে Gradle দ্বন্দ্বে ফেল করে — একটা সরিয়ে দাও
+          unset ANDROID_SDK_ROOT
           cd twa
           chmod +x ./gradlew
           "$BUBBLEWRAP" build \

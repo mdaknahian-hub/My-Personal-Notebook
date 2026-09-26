@@ -62,10 +62,12 @@ jobs:
           [ -z "$URL" ] && URL=$(jq -r .url apk-config.json)
           [ -z "$VER" ] && VER=$(jq -r .version apk-config.json)
           [ -z "$PKG" ] && PKG=$(jq -r .package_id apk-config.json)
+          MANIFEST=$(jq -r '.manifest // "/manifest.webmanifest"' apk-config.json)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "package_id=$PKG" >> "$GITHUB_OUTPUT"
-          echo "URL=$URL  version=$VER  package=$PKG"
+          echo "manifest=$MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "URL=$URL  manifest=$MANIFEST  version=$VER  package=$PKG"
 
       - name: JDK 17 বসান
         uses: actions/setup-java@v4
@@ -86,6 +88,7 @@ jobs:
           set +e
           node scripts/apk/generate-twa.mjs \
             --url "${{ steps.cfg.outputs.url }}" \
+            --manifest-path "${{ steps.cfg.outputs.manifest }}" \
             --out twa \
             --package-id "${{ steps.cfg.outputs.package_id }}" \
             --version-name "${{ steps.cfg.outputs.version }}" \

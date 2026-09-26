@@ -1,6 +1,7 @@
 {
-  "url": "https://3000-iazrnrv8wwsuh65lh1ni6.e2b.app",
+  "url": "https://airhorner.com",
+  "manifest": "/manifest.json",
   "version": "0.0.0-test",
   "package_id": "com.dokanhishab.app",
-  "_note": "আসল APK-এর জন্য url-এ Render হোস্টিং URL বসিয়ে version বাড়িয়ে push করুন — বিল্ড নিজে শুরু হবে।"
+  "_note": "টেস্ট চলছে — আসল APK-এর জন্য url-এ Render হোস্টিং URL + manifest-এ /manifest.webmanifest বসিয়ে version বাড়িয়ে push করুন।"
 }

@@ -52,6 +52,8 @@ function arg(name, def) {
 }
 
 const url = (arg("url") ?? "").replace(/\/+$/, "");
+const manifestPath = arg("manifest-path", "/manifest.webmanifest");
+const manifestUrl = `${url}${manifestPath.startsWith("/") ? "" : "/"}${manifestPath}`;
 const outDir = resolve(arg("out", "twa"));
 const packageId = arg("package-id", "com.dokanhishab.app");
 const versionName = arg("version-name", "1.0.0");
@@ -79,10 +81,10 @@ const { TwaManifest, TwaGenerator, Config, JdkHelper, KeyTool, ConsoleLog } = co
 const log = new ConsoleLog("generate-twa");
 
 console.log("node:", process.version, "| cwd:", process.cwd());
-console.log("→ ওয়েব ম্যানিফেস্ট পড়া হচ্ছে:", `${url}/manifest.webmanifest`);
+console.log("→ ওয়েব ম্যানিফেস্ট পড়া হচ্ছে:", manifestUrl);
 let twa;
 try {
-  twa = await TwaManifest.fromWebManifest(`${url}/manifest.webmanifest`);
+  twa = await TwaManifest.fromWebManifest(manifestUrl);
 } catch (e) {
   console.error("✗ ম্যানিফেস্ট আনা যায়নি:", e?.message ?? e);
   if (e?.cause) console.error("  কারণ:", e.cause?.message ?? e.cause);

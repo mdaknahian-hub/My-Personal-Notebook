@@ -32,6 +32,8 @@ export type TxnLite = {
   /** অপটিমিস্টিক আপডেটের সময় সত্য */
   _pending?: boolean;
   _failed?: boolean;
+  /** নেট ছাড়া লেখা — সিঙ্কের অপেক্ষায় */
+  _offline?: boolean;
 };
 
 export type CustomerLite = {
@@ -53,6 +55,8 @@ export type CustomerLite = {
   lastActivityAt: string | Date | null;
   txnCount: number;
   _pending?: boolean;
+  /** নেট ছাড়া লেখা — সিঙ্কের অপেক্ষায় */
+  _offline?: boolean;
 };
 
 export type ProductLite = {

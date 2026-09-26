@@ -335,6 +335,11 @@ export function TransactionsClient() {
                                 {meta.icon}
                                 {meta.label}
                               </span>
+                              {t._offline ? (
+                                <span className={cn("chip", TONES.amber)}>
+                                  অফলাইন
+                                </span>
+                              ) : null}
                             </div>
                             <p className="truncate text-xs text-muted">
                               {t.items.length > 0

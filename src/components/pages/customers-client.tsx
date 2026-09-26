@@ -199,6 +199,7 @@ export function CustomersClient() {
                         {c.tag}
                       </Badge>
                       {!c.isActive ? <Badge tone="slate">বন্ধ</Badge> : null}
+                      {c._offline ? <Badge tone="amber">অফলাইন • সিঙ্ক বাকি</Badge> : null}
                     </div>
                     <p className="truncate text-xs text-muted">
                       {prettyPhone(c.phone, bn)}

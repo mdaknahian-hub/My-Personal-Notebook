@@ -163,10 +163,13 @@ export function TransactionForm({
 
     setSaving(false);
     if (result.ok) {
-      toast.success(
-        editing ? "লেনদেন হালনাগাদ হয়েছে" : "হিসাব লেখা হয়েছে",
-        selectedCustomer ? `${selectedCustomer.name} — ${fmtMoney(amount, { bn })}` : undefined,
-      );
+      // অফলাইনে জমা হলে স্টোর নিজেই টোস্ট দেখায়
+      if (!result.queued) {
+        toast.success(
+          editing ? "লেনদেন হালনাগাদ হয়েছে" : "হিসাব লেখা হয়েছে",
+          selectedCustomer ? `${selectedCustomer.name} — ${fmtMoney(amount, { bn })}` : undefined,
+        );
+      }
       onDone();
     }
   };
@@ -186,7 +189,9 @@ export function TransactionForm({
       setCustomerId(result.data.id);
       setNewCustomerOpen(false);
       setNewCustomer({ name: "", phone: "", opening: 0 });
-      toast.success("নতুন কাস্টমার যোগ হয়েছে", result.data.name);
+      if (!result.queued) {
+        toast.success("নতুন কাস্টমার যোগ হয়েছে", result.data.name);
+      }
     }
   };
 

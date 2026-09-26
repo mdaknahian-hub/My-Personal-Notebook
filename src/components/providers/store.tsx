@@ -4,7 +4,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type ReactNode,
@@ -12,6 +14,23 @@ import {
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "@/components/providers/theme";
+import {
+  OFFLINE_SAVED_MESSAGE,
+  REQUEST_SYNC_EVENT,
+  enqueue,
+  isNetworkFailure,
+  isQueued,
+  isTmpId,
+  loadQueue,
+  notifyQueueChange,
+  notifySyncState,
+  removeFromQueue,
+  removeTempFromQueue,
+  rewriteQueuedCustomerRefs,
+  setLastSyncAt,
+  updateQueuedInput,
+} from "@/lib/offline-queue";
+import { toBnDigits } from "@/lib/format";
 import type {
   ActivityLite,
   CustomerLite,
@@ -37,13 +56,17 @@ type StoreState = {
   reminders: ReminderLite[];
 };
 
-type MutationResult<T> = { ok: true; data: T } | { ok: false; error: string };
+type MutationResult<T> =
+  | { ok: true; data: T; queued?: boolean }
+  | { ok: false; error: string; offline?: boolean };
 
 type StoreValue = StoreState & {
   /** বাংলা সংখ্যা দেখানো হবে কি না */
   bn: boolean;
   syncing: boolean;
   refresh: () => void;
+  /** অফলাইন কিউ-তে জমা এন্ট্রি এখনই সার্ভারে পাঠানোর চেষ্টা */
+  syncOffline: () => Promise<void>;
   dueOf: (customerId: string) => number;
   ledgerOf: (customerId: string) => Array<TxnLite & { delta: number; balance: number }>;
   temp: {
@@ -118,12 +141,13 @@ export function StoreProvider({
   const request = useCallback(
     async <T,>(
       url: string,
-      options: RequestInit & { method: string },
+      options: RequestInit & { method: string; silentOffline?: boolean },
     ): Promise<MutationResult<T>> => {
+      const { silentOffline, ...init } = options;
       try {
         const res = await fetch(url, {
           headers: { "Content-Type": "application/json" },
-          ...options,
+          ...init,
         });
         const payload = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -133,10 +157,14 @@ export function StoreProvider({
           return { ok: false, error: message };
         }
         return { ok: true, data: payload as T };
-      } catch {
+      } catch (error) {
         const message = "ইন্টারনেট সংযোগ পাওয়া যাচ্ছে না";
+        // অফলাইন-সচেতন মিউটেশন (কাস্টমার/লেনদেন) নিজেরাই বার্তা দেখায়
+        if (silentOffline && isNetworkFailure(error)) {
+          return { ok: false, error: message, offline: true };
+        }
         toast.error(message);
-        return { ok: false, error: message };
+        return { ok: false, error: message, offline: isNetworkFailure(error) };
       }
     },
     [toast],
@@ -148,6 +176,9 @@ export function StoreProvider({
 
   /** সার্ভার থেকে নতুন ডেটা এনে স্টেট মিলিয়ে নেয় (অপটিমিস্টিক ত্রুটি হলে) */
   const resync = useCallback(async () => {
+    // কিউ-তে অফলাইন এন্ট্রি থাকলে সার্ভার ডেটা দিয়ে স্টেট মুছে ফেলা যাবে না —
+    // তাহলে স্ক্রিন থেকে সিঙ্ক-না-হওয়া এন্ট্রি হারিয়ে যেত
+    if (loadQueue().length > 0) return;
     try {
       const res = await fetch("/api/bootstrap", { cache: "no-store" });
       if (!res.ok) return;
@@ -220,12 +251,51 @@ export function StoreProvider({
       };
       setState((prev) => ({ ...prev, customers: [...prev.customers, optimistic] }));
 
+      // নেট নেই → localStorage কিউ-তে জমা রেখে অপটিমিস্টিক এন্ট্রি স্ক্রিনে রাখো
+      const saveOffline = () => {
+        setState((prev) => ({
+          ...prev,
+          customers: prev.customers.map((c) =>
+            c.id === optimistic.id ? { ...c, _offline: true } : c,
+          ),
+          activities: [
+            {
+              id: tempId(),
+              action: "create",
+              entity: "customer",
+              entityId: optimistic.id,
+              title: `নতুন কাস্টমার যোগ করা হয়েছে — ${optimistic.name}`,
+              detail: optimistic.phone,
+              amount: optimistic.openingBalance || null,
+              createdAt: new Date().toISOString(),
+            },
+            ...prev.activities,
+          ].slice(0, 40),
+        }));
+        enqueue({
+          kind: "customer",
+          tempId: optimistic.id,
+          input: input as unknown as Record<string, unknown>,
+          label: `নতুন কাস্টমার — ${optimistic.name}`,
+        });
+        toast.info(OFFLINE_SAVED_MESSAGE, "নেট ফিরলে নিজে থেকে সার্ভারে জমা হবে");
+        return {
+          ok: true as const,
+          data: { ...optimistic, _offline: true },
+          queued: true as const,
+        };
+      };
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) return saveOffline();
+
       const result = await request<{ customer: CustomerLite }>("/api/customers", {
         method: "POST",
+        silentOffline: true,
         body: JSON.stringify(input),
       });
 
       if (!result.ok) {
+        if (result.offline) return saveOffline();
         setState((prev) => ({
           ...prev,
           customers: prev.customers.filter((c) => c.id !== optimistic.id),
@@ -267,7 +337,7 @@ export function StoreProvider({
       refresh();
       return { ok: true, data: saved };
     },
-    [request, refresh],
+    [request, refresh, toast],
   );
 
   const updateCustomer: StoreValue["temp"]["updateCustomer"] = useCallback(
@@ -298,6 +368,20 @@ export function StoreProvider({
         };
       });
 
+      // এখনো সিঙ্ক হয়নি এমন অফলাইন এন্ট্রি এডিট হলে কিউ-এর ইনপুটই বদলে যায়,
+      // যাতে সিঙ্কের সময় নতুন তথ্যটাই সার্ভারে যায়
+      if (isTmpId(id) && isQueued(id)) {
+        updateQueuedInput(id, "customer", input as Record<string, unknown>);
+        setState((prev) => ({
+          ...prev,
+          customers: prev.customers.map((c) =>
+            c.id === id ? { ...c, _pending: true, _offline: true } : c,
+          ),
+        }));
+        toast.info("অফলাইন এন্ট্রি আপডেট হয়েছে", "সিঙ্কের সময় নতুন তথ্যটাই যাবে");
+        return { ok: true, data: { ...snapshot, ...input } as CustomerLite };
+      }
+
       const result = await request<{ customer: CustomerLite }>(
         `/api/customers/${id}`,
         { method: "PATCH", body: JSON.stringify(input) },
@@ -324,7 +408,7 @@ export function StoreProvider({
       refresh();
       return { ok: true, data: saved };
     },
-    [request, refresh],
+    [request, refresh, toast],
   );
 
   const removeCustomer: StoreValue["temp"]["removeCustomer"] = useCallback(
@@ -340,6 +424,24 @@ export function StoreProvider({
           transactions: prev.transactions.filter((t) => t.customerId !== id),
         };
       });
+
+      // সার্ভারে যায়নি এমন অফলাইন কাস্টমার — কিউ থেকে মুছলেই হলো
+      if (isTmpId(id)) {
+        removeTempFromQueue(id);
+        // ওই কাস্টমারের জন্য লেখা অফলাইন লেনদেনগুলোও কিউ + স্ক্রিন থেকে বাদ
+        for (const q of loadQueue()) {
+          if (q.kind === "transaction" && q.input.customerId === id) {
+            removeFromQueue(q.qid);
+          }
+        }
+        setState((prev) => ({
+          ...prev,
+          transactions: prev.transactions.filter((t) => t.customerId !== id),
+        }));
+        toast.info("অফলাইন এন্ট্রি মুছে ফেলা হয়েছে");
+        refresh();
+        return { ok: true, data: { id } };
+      }
 
       const result = await request<{ success: boolean }>(`/api/customers/${id}`, {
         method: "DELETE",
@@ -359,7 +461,7 @@ export function StoreProvider({
       refresh();
       return { ok: true, data: { id } };
     },
-    [request, refresh],
+    [request, refresh, toast],
   );
 
   /* ------------------------------------------------------- লেনদেন */
@@ -416,12 +518,38 @@ export function StoreProvider({
         adjustStock(input.items, -1);
       }
 
+      // নেট নেই → localStorage কিউ-তে জমা রেখে স্ক্রিনের হিসাব অটুট রাখো
+      const saveOffline = () => {
+        setState((prev) => ({
+          ...prev,
+          transactions: prev.transactions.map((t) =>
+            t.id === optimistic.id ? { ...t, _offline: true } : t,
+          ),
+        }));
+        enqueue({
+          kind: "transaction",
+          tempId: optimistic.id,
+          input: input as unknown as Record<string, unknown>,
+          label: describeTxn(optimistic),
+        });
+        toast.info(OFFLINE_SAVED_MESSAGE, "নেট ফিরলে নিজে থেকে সার্ভারে জমা হবে");
+        return {
+          ok: true as const,
+          data: { ...optimistic, _offline: true },
+          queued: true as const,
+        };
+      };
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) return saveOffline();
+
       const result = await request<{ transaction: TxnLite }>("/api/transactions", {
         method: "POST",
+        silentOffline: true,
         body: JSON.stringify(input),
       });
 
       if (!result.ok) {
+        if (result.offline) return saveOffline();
         setState((prev) => {
           const failed = prev.transactions.find((t) => t.id === optimistic.id);
           return {
@@ -456,7 +584,7 @@ export function StoreProvider({
       refresh();
       return { ok: true, data: saved };
     },
-    [state.customers, request, adjustCustomerDue, adjustStock, refresh, resync],
+    [state.customers, request, adjustCustomerDue, adjustStock, refresh, resync, toast],
   );
 
   const updateTransaction: StoreValue["temp"]["updateTransaction"] = useCallback(
@@ -502,12 +630,44 @@ export function StoreProvider({
         adjustStock(input.items, -1);
       }
 
+      // এখনো সিঙ্ক হয়নি এমন অফলাইন এন্ট্রি এডিট হলে কিউ-এর ইনপুটই বদলে যায়
+      if (isTmpId(id) && isQueued(id)) {
+        updateQueuedInput(id, "transaction", input as unknown as Record<string, unknown>);
+        setState((prev) => ({
+          ...prev,
+          transactions: prev.transactions.map((t) =>
+            t.id === id ? { ...t, _pending: true, _offline: true } : t,
+          ),
+        }));
+        toast.info("অফলাইন এন্ট্রি আপডেট হয়েছে", "সিঙ্কের সময় নতুন তথ্যটাই যাবে");
+        return { ok: true, data: { ...snapshot, ...input } as unknown as TxnLite };
+      }
+
       const result = await request<{ transaction: TxnLite }>(
         `/api/transactions/${id}`,
         { method: "PATCH", body: JSON.stringify(input) },
       );
 
       if (!result.ok) {
+        if (result.offline && snapshot) {
+          // নেট নেই — resync করলে অন্য অফলাইন এন্ট্রি মুছে যেত, তাই নিখুঁত রোলব্যাক
+          const restore = snapshot;
+          setState((prev) => ({
+            ...prev,
+            transactions: prev.transactions.map((t) => (t.id === id ? restore : t)),
+          }));
+          adjustCustomerDue(input.customerId, -signedDue(input));
+          if (input.adjustStock !== false && (input.type === "DUE" || input.type === "CASH_SALE")) {
+            adjustStock(input.items, 1);
+          }
+          if (before) {
+            adjustCustomerDue(before.customerId, signedDue(before));
+            if (before.type === "DUE" || before.type === "CASH_SALE") {
+              adjustStock(before.items, -1);
+            }
+          }
+          return result;
+        }
         await resync();
         return result;
       }
@@ -521,7 +681,7 @@ export function StoreProvider({
       refresh();
       return { ok: true, data: result.data.transaction };
     },
-    [request, adjustCustomerDue, adjustStock, refresh, resync],
+    [request, adjustCustomerDue, adjustStock, refresh, resync, toast],
   );
 
   const removeTransaction: StoreValue["temp"]["removeTransaction"] = useCallback(
@@ -544,18 +704,39 @@ export function StoreProvider({
         }
       }
 
+      // সার্ভারে যায়নি এমন অফলাইন লেনদেন — কিউ থেকে মুছলেই হলো
+      if (isTmpId(id)) {
+        removeTempFromQueue(id);
+        toast.info("অফলাইন এন্ট্রি মুছে ফেলা হয়েছে");
+        refresh();
+        return { ok: true, data: { id } };
+      }
+
       const result = await request<{ success: boolean }>(`/api/transactions/${id}`, {
         method: "DELETE",
       });
 
       if (!result.ok) {
+        if (result.offline && before) {
+          // নেট নেই — resync না করে নিখুঁত রোলব্যাক
+          const restore = before;
+          setState((prev) => ({
+            ...prev,
+            transactions: [restore, ...prev.transactions],
+          }));
+          adjustCustomerDue(restore.customerId, signedDue(restore));
+          if (restore.type === "DUE" || restore.type === "CASH_SALE") {
+            adjustStock(restore.items, -1);
+          }
+          return result;
+        }
         await resync();
         return result;
       }
       refresh();
       return { ok: true, data: { id } };
     },
-    [request, adjustCustomerDue, adjustStock, refresh, resync],
+    [request, adjustCustomerDue, adjustStock, refresh, resync, toast],
   );
 
   /* ------------------------------------------------------- পণ্য */
@@ -1068,6 +1249,192 @@ export function StoreProvider({
     return result;
   }, [request, refresh, resync]);
 
+  /* ------------------------------------------------------- অফলাইন সিঙ্ক */
+
+  const syncingRef = useRef(false);
+
+  /**
+   * কিউ-তে জমা বাকি/জমা/কাস্টমার এন্ট্রি ক্রমানুসারে সার্ভারে পাঠায়।
+   * সফল হলে স্ক্রিনের অস্থায়ী tmp_ আইডি সার্ভারের আসল আইডিতে বদলে যায়।
+   */
+  const syncOfflineQueue = useCallback(async () => {
+    if (syncingRef.current) return;
+    if (typeof window === "undefined") return;
+    if (loadQueue().length === 0) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    syncingRef.current = true;
+    notifySyncState(true);
+    // এই রাউন্ডে tmp_ → আসল আইডির ম্যাপ (লেনদেনের customerId মেলাতে লাগে)
+    const idMap = new Map<string, string>();
+    let synced = 0;
+    let failed = 0;
+    try {
+      try {
+        const pong = await fetch("/api/ping", { cache: "no-store" });
+        if (!pong.ok) return;
+      } catch {
+        return; // এখনো নেট নেই — পরে আবার চেষ্টা হবে
+      }
+
+      for (const op of loadQueue()) {
+        try {
+          if (op.kind === "customer") {
+            const res = await fetch("/api/customers", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(op.input),
+            });
+            if (!res.ok) {
+              // সার্ভার/লগইন সমস্যা হলে বাকিটা পরে — কিউ অটুট থাকবে
+              if (res.status >= 500 || res.status === 401 || res.status === 429) return;
+              // ভ্যালিডেশন এরর — আটকে রাখলে কিউ জ্যাম হবে, তাই বাদ
+              failed += 1;
+              removeFromQueue(op.qid);
+              setState((prev) => ({
+                ...prev,
+                customers: prev.customers.map((c) =>
+                  c.id === op.tempId ? { ...c, _pending: false, _offline: false } : c,
+                ),
+              }));
+              continue;
+            }
+            const payload = (await res.json()) as { customer: CustomerLite };
+            const saved = payload.customer;
+            idMap.set(op.tempId, saved.id);
+            rewriteQueuedCustomerRefs(op.tempId, saved.id);
+            setState((prev) => ({
+              ...prev,
+              customers: prev.customers.map((c) =>
+                c.id === op.tempId
+                  ? {
+                      ...c,
+                      ...saved,
+                      // সার্ভার ব্যালেন্স ছাড়া ফেরত দেয় — স্ক্রিনের চলমান হিসাব রাখো
+                      due: c.due,
+                      totalSale: c.totalSale,
+                      totalPaid: c.totalPaid,
+                      txnCount: c.txnCount,
+                      lastActivityAt: c.lastActivityAt,
+                      _pending: false,
+                      _offline: false,
+                    }
+                  : c,
+              ),
+              // ওই কাস্টমারের অফলাইন লেনদেনগুলোর customerId-ও আসল আইডিতে বদলাও
+              transactions: prev.transactions.map((t) =>
+                t.customerId === op.tempId
+                  ? {
+                      ...t,
+                      customerId: saved.id,
+                      customer: {
+                        id: saved.id,
+                        name: saved.name,
+                        color: saved.color,
+                        tag: saved.tag,
+                      },
+                    }
+                  : t,
+              ),
+              activities: prev.activities.map((a) =>
+                a.entityId === op.tempId ? { ...a, entityId: saved.id } : a,
+              ),
+            }));
+            removeFromQueue(op.qid);
+            synced += 1;
+          } else {
+            const input = { ...(op.input as unknown as TransactionInputT) };
+            const cid = input.customerId;
+            if (isTmpId(cid)) {
+              const resolved = cid ? idMap.get(cid) : undefined;
+              if (resolved) {
+                input.customerId = resolved;
+              } else {
+                // কাস্টমার এখনো সিঙ্ক হয়নি (কিউ-তে পরে আছে বা ব্যর্থ) — এই রাউন্ডে বাদ
+                continue;
+              }
+            }
+            const res = await fetch("/api/transactions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(input),
+            });
+            if (!res.ok) {
+              if (res.status >= 500 || res.status === 401 || res.status === 429) return;
+              failed += 1;
+              removeFromQueue(op.qid);
+              setState((prev) => ({
+                ...prev,
+                transactions: prev.transactions.map((t) =>
+                  t.id === op.tempId
+                    ? { ...t, _pending: false, _offline: false, _failed: true }
+                    : t,
+                ),
+              }));
+              continue;
+            }
+            const payload = (await res.json()) as { transaction: TxnLite };
+            const saved = payload.transaction;
+            idMap.set(op.tempId, saved.id);
+            setState((prev) => ({
+              ...prev,
+              transactions: prev.transactions.map((t) =>
+                t.id === op.tempId
+                  ? { ...t, ...saved, _pending: false, _offline: false }
+                  : t,
+              ),
+              activities: prev.activities.map((a) =>
+                a.entityId === op.tempId ? { ...a, entityId: saved.id } : a,
+              ),
+            }));
+            removeFromQueue(op.qid);
+            synced += 1;
+          }
+        } catch (error) {
+          if (isNetworkFailure(error)) return; // মাঝপথে নেট গেছে — বাকিটা পরে
+          failed += 1;
+          removeFromQueue(op.qid);
+        }
+      }
+    } finally {
+      syncingRef.current = false;
+      notifySyncState(false);
+      notifyQueueChange();
+      if (synced > 0) {
+        setLastSyncAt();
+        await resync();
+        refresh();
+        toast.success(
+          `${toBnDigits(synced)}টি অফলাইন এন্ট্রি সিঙ্ক হয়েছে`,
+          "অস্থায়ী আইডি আসল আইডিতে বদলে গেছে",
+        );
+      }
+      if (failed > 0) {
+        toast.error(
+          `${toBnDigits(failed)}টি এন্ট্রি সিঙ্ক করা যায়নি`,
+          "তথ্য যাচাই করে আবার চেষ্টা করুন",
+        );
+      }
+    }
+  }, [refresh, resync, toast]);
+
+  // নেট ফিরলে / সিঙ্ক অনুরোধ এলে কিউ সিঙ্ক করো
+  useEffect(() => {
+    const onSyncRequest = () => void syncOfflineQueue();
+    const onOnline = () => void syncOfflineQueue();
+    window.addEventListener(REQUEST_SYNC_EVENT, onSyncRequest);
+    window.addEventListener("online", onOnline);
+    // মাউন্টের সময় কিউ-তে কিছু থাকলে একটু পরে নিজে থেকে সিঙ্ক
+    const timer =
+      loadQueue().length > 0
+        ? setTimeout(() => void syncOfflineQueue(), 2500)
+        : null;
+    return () => {
+      window.removeEventListener(REQUEST_SYNC_EVENT, onSyncRequest);
+      window.removeEventListener("online", onOnline);
+      if (timer) clearTimeout(timer);
+    };
+  }, [syncOfflineQueue]);
+
   /* ------------------------------------------------------- মূল্য */
 
   const value = useMemo<StoreValue>(() => {
@@ -1101,6 +1468,7 @@ export function StoreProvider({
       bn: state.user.bengaliDigits,
       syncing,
       refresh,
+      syncOffline: syncOfflineQueue,
       dueOf,
       ledgerOf,
       temp: {
@@ -1132,6 +1500,7 @@ export function StoreProvider({
     state,
     syncing,
     refresh,
+    syncOfflineQueue,
     addCustomer,
     updateCustomer,
     removeCustomer,

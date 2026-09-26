@@ -61,7 +61,10 @@ export function CustomerForm({
       : await temp.addCustomer(payload);
     setSaving(false);
     if (result.ok) {
-      toast.success(editing ? "তথ্য হালনাগাদ হয়েছে" : "কাস্টমার যোগ হয়েছে", form.name);
+      // অফলাইনে জমা হলে স্টোর নিজেই টোস্ট দেখায়
+      if (!result.queued) {
+        toast.success(editing ? "তথ্য হালনাগাদ হয়েছে" : "কাস্টমার যোগ হয়েছে", form.name);
+      }
       onDone();
     }
   };

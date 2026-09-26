@@ -30,6 +30,7 @@ import { Modal } from "@/components/ui/modal";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { GlobalSearch } from "@/components/layout/global-search";
 import { NotificationPanel } from "@/components/layout/notification-panel";
+import { OfflineStatusBar } from "@/components/layout/offline-status-bar";
 
 type ShellProps = { children: ReactNode; title?: string };
 
@@ -170,6 +171,9 @@ export function AppShell({ children }: ShellProps) {
       {/* ------------------------------------------------ মূল অংশ */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="no-print sticky top-0 z-40 border-b bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-6">
+          <div className="-mx-4 -mt-3 mb-3 sm:-mx-6">
+            <OfflineStatusBar />
+          </div>
           <div className="flex items-center gap-3">
             <button
               type="button"

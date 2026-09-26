@@ -8,6 +8,7 @@ import "@fontsource/hind-siliguri/latin-600.css";
 import "./globals.css";
 import { ThemeProvider, themeScript } from "@/components/providers/theme";
 import { ToastProvider } from "@/components/ui/toast";
+import { OfflineProvider } from "@/components/providers/offline";
 
 export const metadata: Metadata = {
   title: {
@@ -15,9 +16,18 @@ export const metadata: Metadata = {
     template: "%s • দোকান হিসাব",
   },
   description:
-    "মনোহারী দোকানের বাকি হিসাব, কাস্টমার খাতা, স্টক, খরচ, সাপ্লায়ার ও রিপোর্ট — সব এক অ্যাপে। মোবাইলেই ব্যবহারযোগ্য স্মার্ট ব্যবস্থাপনা।",
+    "মনোহারী দোকানের বাকি হিসাব, কাস্টমার খাতা, স্টক, খরচ, সাপ্লায়ার ও রিপোর্ট — নেট ছাড়াও চলে, সব এক অ্যাপে। মোবাইলেই ব্যবহারযোগ্য স্মার্ট ব্যবস্থাপনা।",
   applicationName: "দোকান হিসাব",
   keywords: ["বাকির খাতা", "দোকান হিসাব", "মুদি দোকান", "বাংলা অ্যাপ", "due book"],
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "দোকান হিসাব" },
 };
 
@@ -41,7 +51,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <OfflineProvider>{children}</OfflineProvider>
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -19,6 +19,7 @@ import {
   User,
 } from "lucide-react";
 import { Avatar, Badge, Card, SectionHeader, TONES } from "@/components/ui/bits";
+import { OfflineSyncCard } from "@/components/pages/offline-sync-card";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Field, Input, MoneyInput, Segmented, Textarea } from "@/components/ui/fields";
 import { useStore } from "@/components/providers/store";
@@ -319,6 +320,9 @@ export function SettingsClient() {
           </button>
         </div>
       </Card>
+
+      {/* অফলাইন ও সিঙ্ক */}
+      <OfflineSyncCard />
 
       {/* ডেটা */}
       <Card>

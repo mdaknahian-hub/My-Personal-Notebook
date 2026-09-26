@@ -150,6 +150,18 @@ jobs:
           fi
           exit "$code"
 
+      - name: APK যাচাই (সাইন + প্যাকেজ + ভার্সন)
+        run: |
+          BT="$ANDROID_HOME/build-tools/36.1.0"
+          echo "## APK যাচাই" >> "$GITHUB_STEP_SUMMARY"
+          "$BT/apksigner" verify --print-certs twa/app-release-signed.apk 2>&1 | head -4 | tee -a "$GITHUB_STEP_SUMMARY"
+          BADGE=$("$BT/aapt" dump badging twa/app-release-signed.apk | grep -m1 "^package:")
+          echo "$BADGE" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::notice::$BADGE"
+          echo "$BADGE" | grep -q "name='${{ steps.cfg.outputs.package_id }}'" || { echo "::error::প্যাকেজ ID মেলেনি!"; exit 1; }
+          echo "$BADGE" | grep -q "versionName='${{ steps.cfg.outputs.version }}'" || { echo "::error::ভার্সন মেলেনি!"; exit 1; }
+          echo "✅ APK সাইন ঠিক, প্যাকেজ+ভার্সন মিলেছে"
+
       - name: SHA-256 ফিঙ্গারপ্রিন্ট বের করুন
         id: fp
         run: |

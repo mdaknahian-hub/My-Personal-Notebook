@@ -114,9 +114,20 @@ jobs:
             git push
           fi
 
-      - name: Bubblewrap কনফিগ লিখুন
+      - name: Android SDK প্রস্তুত (build-tools 36 + পাথ ঠিক করা)
         run: |
-          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > bw-config.json
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "build-tools;36.1.0" "platforms;android-36" 2>&1 | tail -3
+          # Bubblewrap SDK রুটে tools/ বা bin/ ফোল্ডার আশা করে — symlink দিয়ে মেলান
+          mkdir -p bw-sdk
+          ln -sfn "$ANDROID_HOME/build-tools" bw-sdk/build-tools
+          ln -sfn "$ANDROID_HOME/platforms" bw-sdk/platforms
+          ln -sfn "$ANDROID_HOME/platform-tools" bw-sdk/platform-tools
+          ln -sfn "$ANDROID_HOME/cmdline-tools/latest" bw-sdk/tools
+          [ -d "$ANDROID_HOME/licenses" ] && ln -sfn "$ANDROID_HOME/licenses" bw-sdk/licenses || true
+          ls bw-sdk/
+          printf '{"jdkPath":"%s","androidSdkPath":"%s/bw-sdk"}' "$JAVA_HOME" "$PWD" > bw-config.json
           cat bw-config.json
 
       - name: APK + AAB বিল্ড

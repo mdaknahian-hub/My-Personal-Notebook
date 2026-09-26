@@ -1,7 +1,7 @@
 # দোকান হিসাব — Android APK/AAB বিল্ড (PWA → TWA, Bubblewrap দিয়ে)
 #
-# চালানো (GitHub UI → Actions → Build APK → Run workflow, অথবা CLI):
-#   gh workflow run build-apk.yml --ref <branch> -f url=https://dokan-hishab.onrender.com
+# কীভাবে চালাবেন: `apk-config.json`-এ হোস্ট করা PWA-র URL বসিয়ে push করুন —
+# push-এর সাথে সাথেই বিল্ড শুরু হবে। (Actions UI থেকে হাতেও চালানো যায়।)
 #
 # ⚠️ সাইনিং কী: প্রথম রানে `android-signing/dokan-release.keystore` তৈরি হয়ে
 # রিপোতেই কমিট হয়, পরের সব বিল্ড একই কী-তে সাইন হয় (আপডেট কাজ করে)।
@@ -11,29 +11,35 @@
 name: Build APK
 
 on:
+  push:
+    branches:
+      - arena/01a0dc24-my-personal-notebook
+      - main
+    paths:
+      - apk-config.json
+      - .github/workflows/build-apk.yml
+      - scripts/apk/**
   workflow_dispatch:
     inputs:
       url:
-        description: "হোস্ট করা PWA-র URL (https://...)"
-        required: true
+        description: "হোস্ট করা PWA-র URL (https://...) — খালি রাখলে apk-config.json থেকে নেবে"
+        required: false
         type: string
       version:
         description: "ভার্সন নাম (যেমন 1.0.0)"
         required: false
-        default: "1.0.0"
+        default: ""
         type: string
       package_id:
         description: "Android Package ID"
         required: false
-        default: "com.dokanhishab.app"
+        default: ""
         type: string
 
 permissions:
   contents: write
 
 env:
-  PACKAGE_ID: ${{ inputs.package_id }}
-  VERSION_NAME: ${{ inputs.version }}
   KEYSTORE_FILE: android-signing/dokan-release.keystore
   KEY_ALIAS: dokan
   # --- সাইনিং পাসওয়ার্ড (৬+ অক্ষর হতে হবে) ---
@@ -46,6 +52,20 @@ jobs:
     steps:
       - name: কোড নিন
         uses: actions/checkout@v4
+
+      - name: কনফিগ পড়ুন (apk-config.json)
+        id: cfg
+        run: |
+          URL="${{ inputs.url }}"
+          VER="${{ inputs.version }}"
+          PKG="${{ inputs.package_id }}"
+          [ -z "$URL" ] && URL=$(jq -r .url apk-config.json)
+          [ -z "$VER" ] && VER=$(jq -r .version apk-config.json)
+          [ -z "$PKG" ] && PKG=$(jq -r .package_id apk-config.json)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "package_id=$PKG" >> "$GITHUB_OUTPUT"
+          echo "URL=$URL  version=$VER  package=$PKG"
 
       - name: JDK 17 বসান
         uses: actions/setup-java@v4
@@ -64,10 +84,10 @@ jobs:
       - name: TWA প্রজেক্ট তৈরি
         run: |
           node scripts/apk/generate-twa.mjs \
-            --url "${{ inputs.url }}" \
+            --url "${{ steps.cfg.outputs.url }}" \
             --out twa \
-            --package-id "$PACKAGE_ID" \
-            --version-name "$VERSION_NAME" \
+            --package-id "${{ steps.cfg.outputs.package_id }}" \
+            --version-name "${{ steps.cfg.outputs.version }}" \
             --version-code "${{ github.run_number }}" \
             --keystore "$KEYSTORE_FILE" \
             --key-alias "$KEY_ALIAS"
@@ -97,23 +117,40 @@ jobs:
             --config ./bw-config.json
 
       - name: SHA-256 ফিঙ্গারপ্রিন্ট বের করুন
+        id: fp
         run: |
           "$JAVA_HOME/bin/keytool" -list -v \
             -keystore "$KEYSTORE_FILE" -alias "$KEY_ALIAS" \
             -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | tee fingerprints.txt
           SHA256=$(grep -m1 "SHA256:" fingerprints.txt | awk '{print $2}')
-          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"%s","sha256_cert_fingerprints":["%s"]}}]' \
-            "$PACKAGE_ID" "$SHA256" > assetlinks.json
+            "${{ steps.cfg.outputs.package_id }}" "$SHA256" > assetlinks.json
           echo "ফিঙ্গারপ্রিন্ট: $SHA256"
 
       - name: আর্টিফ্যাক্ট আপলোড (APK/AAB)
         uses: actions/upload-artifact@v4
         with:
-          name: dokan-hishab-v${{ inputs.version }}-${{ github.run_number }}
+          name: dokan-hishab-v${{ steps.cfg.outputs.version }}-${{ github.run_number }}
           path: |
             twa/app-release-signed.apk
             twa/app-release-bundle.aab
             fingerprints.txt
             assetlinks.json
           retention-days: 30
+
+      - name: GitHub Release তৈরি
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="apk-v${{ steps.cfg.outputs.version }}-${{ github.run_number }}"
+          ARGS=(--title "দোকান হিসাব $TAG")
+          case "${{ steps.cfg.outputs.version }}" in
+            *test*) ARGS+=(--prerelease --notes "পরীক্ষামূলক বিল্ড — আসল হিসাবে ব্যবহার করবেন না।") ;;
+            *) ARGS+=(--notes "APK ফোনে ইনস্টল করুন। SHA-256: ${{ steps.fp.outputs.sha256 }}") ;;
+          esac
+          gh release create "$TAG" "${ARGS[@]}" \
+            twa/app-release-signed.apk \
+            twa/app-release-bundle.aab \
+            fingerprints.txt \
+            assetlinks.json

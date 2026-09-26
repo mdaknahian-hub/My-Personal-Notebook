@@ -1,4 +1,4 @@
-# Gradle files
+# Gradle files (legacy)
 .gradle/
 build/
 
@@ -21,14 +21,41 @@ output-metadata.json
 .idea/
 misc.xml
 deploymentTargetDropDown.xml
-render.experimental.xml
+experiment.xml
+misc.xml
 
 # Keystore files
 *.jks
 *.keystore
 
-# Google Services (e.g. APIs or Firebase)
+# Google Services (e.g. Firebase)
 google-services.json
 
 # Android Profiling
 *.hprof
+
+# ---------------- Node / Next.js ----------------
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+next-env.d.ts
+*.tsbuildinfo
+
+# ---------------- Database (SQLite) ----------------
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# ---------------- Environment ----------------
+.env
+.env.local
+.env*.local
+
+# ---------------- Misc ----------------
+.DS_Store
+.env.local
+.env*.local

@@ -78,8 +78,16 @@ const core = loadCore();
 const { TwaManifest, TwaGenerator, Config, JdkHelper, KeyTool, ConsoleLog } = core;
 const log = new ConsoleLog("generate-twa");
 
+console.log("node:", process.version, "| cwd:", process.cwd());
 console.log("→ ওয়েব ম্যানিফেস্ট পড়া হচ্ছে:", `${url}/manifest.webmanifest`);
-const twa = await TwaManifest.fromWebManifest(`${url}/manifest.webmanifest`);
+let twa;
+try {
+  twa = await TwaManifest.fromWebManifest(`${url}/manifest.webmanifest`);
+} catch (e) {
+  console.error("✗ ম্যানিফেস্ট আনা যায়নি:", e?.message ?? e);
+  if (e?.cause) console.error("  কারণ:", e.cause?.message ?? e.cause);
+  process.exit(1);
+}
 
 // --- আমাদের মান বসানো ---
 twa.packageId = packageId;

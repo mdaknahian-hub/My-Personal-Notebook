@@ -83,6 +83,7 @@ jobs:
 
       - name: TWA প্রজেক্ট তৈরি
         run: |
+          set +e
           node scripts/apk/generate-twa.mjs \
             --url "${{ steps.cfg.outputs.url }}" \
             --out twa \
@@ -90,7 +91,13 @@ jobs:
             --version-name "${{ steps.cfg.outputs.version }}" \
             --version-code "${{ github.run_number }}" \
             --keystore "$KEYSTORE_FILE" \
-            --key-alias "$KEY_ALIAS"
+            --key-alias "$KEY_ALIAS" 2>&1 | tee twa-gen.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "## TWA জেনারেটর ব্যর্থ (exit $code)" >> "$GITHUB_STEP_SUMMARY"
+            tail -30 twa-gen.log | sed 's/^/::error::/' || true
+          fi
+          exit "$code"
 
       - name: সাইনিং কী রিপোতে সংরক্ষণ (প্রথমবার)
         run: |
@@ -111,10 +118,17 @@ jobs:
 
       - name: APK + AAB বিল্ড
         run: |
+          set +e
           ./scripts/apk/node_modules/.bin/bubblewrap build \
             --manifest ./twa/twa-manifest.json \
             --directory ./twa \
-            --config ./bw-config.json
+            --config ./bw-config.json 2>&1 | tee bw-build.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "## Bubblewrap বিল্ড ব্যর্থ (exit $code)" >> "$GITHUB_STEP_SUMMARY"
+            grep -iE "error|fail|exception" bw-build.log | tail -20 | sed 's/^/::error::/' || true
+          fi
+          exit "$code"
 
       - name: SHA-256 ফিঙ্গারপ্রিন্ট বের করুন
         id: fp

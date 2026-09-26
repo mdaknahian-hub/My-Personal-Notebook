@@ -140,7 +140,7 @@ jobs:
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
             echo "## Bubblewrap বিল্ড ব্যর্থ (exit $code)" >> "$GITHUB_STEP_SUMMARY"
-            grep -iE "error|fail|exception" bw-build.log | tail -20 | sed 's/^/::error::/' || true
+            { grep -A 8 "What went wrong" bw-build.log | head -24; echo "---শেষ 15 লাইন---"; tail -15 bw-build.log; } | sed 's/^/::error::/' || true
           fi
           exit "$code"
 

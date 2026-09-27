@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -54,6 +55,7 @@ import com.nahian.mypersonalnotebook.domain.ReminderRules
 import com.nahian.mypersonalnotebook.notifications.ReminderNotifications
 import com.nahian.mypersonalnotebook.ui.theme.NotebookTheme
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -62,6 +64,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val repository = LocationReminderRepository(applicationContext, ReminderDatabase.get(applicationContext))
         val contentRepository = NotebookContentRepository(applicationContext)
+        lifecycleScope.launch(Dispatchers.IO) { contentRepository.restoreChecklistTaskDeadlineAlarms() }
         val timeReminderRepository = TimeReminderRepository(applicationContext)
         val initialReminderId = intent.getStringExtra(EXTRA_REMINDER_ID)
         val initialOpenSection = intent.getStringExtra(EXTRA_OPEN_SECTION)

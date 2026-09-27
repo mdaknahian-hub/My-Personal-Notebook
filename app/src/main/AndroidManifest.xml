@@ -50,6 +50,21 @@
             android:enabled="true"
             android:exported="false" />
         <receiver
+            android:name=".reminders.ChecklistTaskDeadlineReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver
+            android:name=".reminders.ChecklistTaskDeadlineRestoreReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+            </intent-filter>
+        </receiver>
+        <receiver
             android:name=".reminders.TimeReminderActionReceiver"
             android:enabled="true"
             android:exported="false" />

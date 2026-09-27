@@ -54,8 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.nahian.mypersonalnotebook.reminders.ChecklistTaskAlertSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,7 +71,9 @@ internal fun NotebookSettingsScreen(
     themeMode: NotebookThemeMode,
     language: NotebookLanguage,
     appVersionName: String,
+    taskAlertRepeatMinutes: Int,
     onSaveProfile: (String) -> Unit,
+    onTaskAlertRepeatMinutesChange: (Int) -> Unit,
     onSaveProfilePhoto: suspend (Uri?) -> String?,
     onThemeModeChange: (NotebookThemeMode) -> Unit,
     onToggleLanguage: () -> Unit,
@@ -249,6 +254,15 @@ internal fun NotebookSettingsScreen(
                 )
             }
             item {
+                TaskAlertRepeatSettingsCard(
+                    repeatMinutes = taskAlertRepeatMinutes,
+                    onSave = { minutes ->
+                        onTaskAlertRepeatMinutesChange(minutes)
+                        scope.launch { snackbar.showSnackbar(uiText("Repeat alert interval saved.")) }
+                    },
+                )
+            }
+            item {
                 SettingsActionCard(
                     title = "Help & App Info",
                     description = "${uiText("Version")} $appVersionName · ${uiText("Offline-first notebook with Android backup support.")}",
@@ -256,6 +270,42 @@ internal fun NotebookSettingsScreen(
                     onClick = { showHelp = true },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun TaskAlertRepeatSettingsCard(repeatMinutes: Int, onSave: (Int) -> Unit) {
+    var minutesText by remember(repeatMinutes) { mutableStateOf(repeatMinutes.toString()) }
+    val minutes = minutesText.toIntOrNull()
+    val valid = minutes != null && minutes in ChecklistTaskAlertSettings.MIN_REPEAT_INTERVAL_MINUTES..ChecklistTaskAlertSettings.MAX_REPEAT_INTERVAL_MINUTES
+    Card(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
+            Text(uiText("Overdue task alert interval"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                uiText("Overdue task alerts repeat until the task is marked complete."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
+                OutlinedTextField(
+                    value = minutesText,
+                    onValueChange = { minutesText = it.filter(Char::isDigit).take(3) },
+                    modifier = Modifier.weight(1f),
+                    label = { Text(uiText("Minutes between repeat alerts")) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+                Button(onClick = { minutes?.let(onSave) }, enabled = valid && minutes != repeatMinutes) {
+                    Text(uiText("Save"))
+                }
+            }
+            Text(uiText("Enter 1 to 120 minutes."), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }

@@ -12,6 +12,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.nahian.mypersonalnotebook.reminders.ChecklistTaskDeadlineScheduler
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 
@@ -50,6 +53,9 @@ data class NotebookChecklistItem(
     val text: String,
     val isChecked: Boolean,
     val createdAt: Long,
+    val deadlineAt: Long? = null,
+    val countdownDurationMillis: Long? = null,
+    val countdownStartedAt: Long? = null,
 )
 
 data class ChecklistWithItems(
@@ -103,6 +109,9 @@ abstract class NotebookContentDao {
     @Query("SELECT * FROM notebook_checklist_items WHERE id = :id LIMIT 1")
     abstract suspend fun getChecklistItem(id: String): NotebookChecklistItem?
 
+    @Query("SELECT * FROM notebook_checklist_items")
+    abstract suspend fun getAllChecklistItems(): List<NotebookChecklistItem>
+
     @Upsert
     abstract suspend fun upsertChecklistItem(item: NotebookChecklistItem)
 
@@ -115,13 +124,21 @@ abstract class NotebookContentDao {
 
 @androidx.room.Database(
     entities = [NotebookNote::class, NotebookChecklist::class, NotebookChecklistItem::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class NotebookContentDatabase : RoomDatabase() {
     abstract fun dao(): NotebookContentDao
 
     companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE notebook_checklist_items ADD COLUMN deadlineAt INTEGER")
+                database.execSQL("ALTER TABLE notebook_checklist_items ADD COLUMN countdownDurationMillis INTEGER")
+                database.execSQL("ALTER TABLE notebook_checklist_items ADD COLUMN countdownStartedAt INTEGER")
+            }
+        }
+
         @Volatile
         private var instance: NotebookContentDatabase? = null
 
@@ -130,13 +147,18 @@ abstract class NotebookContentDatabase : RoomDatabase() {
                 context.applicationContext,
                 NotebookContentDatabase::class.java,
                 "notebook_content.db",
-            ).build().also { instance = it }
+            )
+                // Keep notes and checklist data when adding per-task timing fields.
+                .addMigrations(MIGRATION_1_2)
+                .build()
+                .also { instance = it }
         }
     }
 }
 
 class NotebookContentRepository(context: Context) {
-    private val dao = NotebookContentDatabase.get(context).dao()
+    private val appContext = context.applicationContext
+    private val dao = NotebookContentDatabase.get(appContext).dao()
 
     fun observeNotes(): Flow<List<NotebookNote>> = dao.observeNotes()
 
@@ -182,47 +204,100 @@ class NotebookContentRepository(context: Context) {
         return ContentResult.Success
     }
 
-    suspend fun deleteChecklist(id: String) = dao.deleteChecklist(id)
+    suspend fun deleteChecklist(id: String) {
+        dao.getChecklistItems(id).forEach { ChecklistTaskDeadlineScheduler.cancel(appContext, it.id) }
+        dao.deleteChecklist(id)
+    }
 
-    suspend fun updateChecklistItem(checklistId: String, itemId: String, text: String): ContentResult {
+    suspend fun updateChecklistItem(
+        checklistId: String,
+        itemId: String,
+        text: String,
+        timeLimit: ChecklistTaskTimeLimit,
+    ): ContentResult {
         val cleaned = text.trim()
         if (cleaned.isEmpty()) return ContentResult.Error("Write a checklist item first.")
+        if (!timeLimit.isValid()) return ContentResult.Error("Choose one valid task time limit.")
         val existingList = dao.getChecklist(checklistId) ?: return ContentResult.Error("This checklist no longer exists.")
         val existingItem = dao.getChecklistItem(itemId)?.takeIf { it.checklistId == checklistId }
             ?: return ContentResult.Error("This checklist item no longer exists.")
         val now = System.currentTimeMillis()
-        dao.upsertChecklistItem(existingItem.copy(text = cleaned))
+        val countdownStartedAt = when {
+            timeLimit.countdownDurationMillis == null || !timeLimit.startCountdownWhenSaved -> null
+            existingItem.countdownStartedAt != null &&
+                existingItem.countdownDurationMillis == timeLimit.countdownDurationMillis -> existingItem.countdownStartedAt
+            else -> now
+        }
+        val updatedItem = existingItem.copy(
+            text = cleaned,
+            deadlineAt = timeLimit.deadlineAt,
+            countdownDurationMillis = timeLimit.countdownDurationMillis,
+            countdownStartedAt = countdownStartedAt,
+        )
+        dao.upsertChecklistItem(updatedItem)
         dao.touchChecklist(existingList.id, now)
+        if (updatedItem.isChecked) ChecklistTaskDeadlineScheduler.cancel(appContext, itemId)
+        else ChecklistTaskDeadlineScheduler.schedule(appContext, updatedItem)
         return ContentResult.Success
     }
 
-    suspend fun addChecklistItem(checklistId: String, text: String): ContentResult {
+    suspend fun addChecklistItem(
+        checklistId: String,
+        text: String,
+        timeLimit: ChecklistTaskTimeLimit = ChecklistTaskTimeLimit.None,
+    ): ContentResult {
         val cleanText = text.trim()
         if (cleanText.isEmpty()) return ContentResult.Error("Write a checklist item first.")
+        if (!timeLimit.isValid()) return ContentResult.Error("Choose one valid task time limit.")
         if (dao.getChecklist(checklistId) == null) return ContentResult.Error("This checklist no longer exists.")
         val now = System.currentTimeMillis()
-        dao.upsertChecklistItem(
-            NotebookChecklistItem(
-                id = UUID.randomUUID().toString(),
-                checklistId = checklistId,
-                text = cleanText,
-                isChecked = false,
-                createdAt = now,
-            ),
+        val item = NotebookChecklistItem(
+            id = UUID.randomUUID().toString(),
+            checklistId = checklistId,
+            text = cleanText,
+            isChecked = false,
+            createdAt = now,
+            deadlineAt = timeLimit.deadlineAt,
+            countdownDurationMillis = timeLimit.countdownDurationMillis,
+            countdownStartedAt = if (timeLimit.startCountdownWhenSaved) now else null,
         )
+        dao.upsertChecklistItem(item)
         dao.touchChecklist(checklistId, now)
+        ChecklistTaskDeadlineScheduler.schedule(appContext, item)
         return ContentResult.Success
     }
 
     suspend fun setChecklistItemChecked(checklistId: String, itemId: String, isChecked: Boolean) {
+        val item = dao.getChecklistItem(itemId)?.takeIf { it.checklistId == checklistId } ?: return
         dao.setItemChecked(itemId, isChecked)
         dao.touchChecklist(checklistId, System.currentTimeMillis())
+        if (isChecked) ChecklistTaskDeadlineScheduler.cancel(appContext, itemId)
+        else ChecklistTaskDeadlineScheduler.schedule(appContext, item.copy(isChecked = false))
+    }
+
+    suspend fun startChecklistItemCountdown(checklistId: String, itemId: String): ContentResult {
+        val item = dao.getChecklistItem(itemId)?.takeIf { it.checklistId == checklistId }
+            ?: return ContentResult.Error("This checklist item no longer exists.")
+        if (item.isChecked) return ContentResult.Error("Complete tasks do not need a countdown.")
+        if (item.countdownDurationMillis == null) return ContentResult.Error("This task has no countdown time limit.")
+        if (item.countdownStartedAt != null) return ContentResult.Success
+        val startedItem = item.copy(countdownStartedAt = System.currentTimeMillis())
+        dao.upsertChecklistItem(startedItem)
+        dao.touchChecklist(checklistId, System.currentTimeMillis())
+        ChecklistTaskDeadlineScheduler.schedule(appContext, startedItem)
+        return ContentResult.Success
     }
 
     suspend fun deleteChecklistItem(checklistId: String, itemId: String) {
+        ChecklistTaskDeadlineScheduler.cancel(appContext, itemId)
         dao.deleteChecklistItem(itemId)
         dao.touchChecklist(checklistId, System.currentTimeMillis())
     }
+
+    suspend fun restoreChecklistTaskDeadlineAlarms() {
+        ChecklistTaskDeadlineScheduler.restoreAll(appContext)
+    }
+
 }
 
 sealed interface ContentResult {

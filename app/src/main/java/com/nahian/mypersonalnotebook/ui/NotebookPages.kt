@@ -77,6 +77,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,19 +90,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nahian.mypersonalnotebook.data.ChecklistTaskTimeLimit
+import com.nahian.mypersonalnotebook.data.ChecklistTaskTimeLimitType
 import com.nahian.mypersonalnotebook.data.ChecklistWithItems
 import com.nahian.mypersonalnotebook.data.ContentResult
 import com.nahian.mypersonalnotebook.data.NotebookChecklist
+import com.nahian.mypersonalnotebook.data.NotebookChecklistItem
 import com.nahian.mypersonalnotebook.data.NotebookContentRepository
 import com.nahian.mypersonalnotebook.data.NotebookNote
 import com.nahian.mypersonalnotebook.data.TimeReminderRepository
 import com.nahian.mypersonalnotebook.domain.NotebookVoiceCommands
 import com.nahian.mypersonalnotebook.domain.NotebookVoiceDestination
+import com.nahian.mypersonalnotebook.reminders.ChecklistTaskAlertSettings
 import com.nahian.mypersonalnotebook.widget.NotebookWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 import java.util.UUID
 
 private enum class NotebookSection {
@@ -133,6 +140,7 @@ internal fun NotebookAppRoot(
     val appVersionName = remember(context) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "1.0.0"
     }
+    var taskAlertRepeatMinutes by remember { mutableStateOf(ChecklistTaskAlertSettings.repeatIntervalMinutes(context)) }
     var pendingReminderId by remember(initialReminderId) { mutableStateOf(initialReminderId) }
     var locationNavigationVisible by remember { mutableStateOf(true) }
     var showVoiceLanguageDialog by remember { mutableStateOf(false) }
@@ -270,6 +278,10 @@ internal fun NotebookAppRoot(
                             themeMode = themeMode,
                             language = language,
                             appVersionName = appVersionName,
+                            taskAlertRepeatMinutes = taskAlertRepeatMinutes,
+                            onTaskAlertRepeatMinutesChange = { minutes ->
+                                if (ChecklistTaskAlertSettings.saveRepeatIntervalMinutes(context, minutes)) taskAlertRepeatMinutes = minutes
+                            },
                             onSaveProfile = { name ->
                                 NotebookAppSettingsStore.saveProfileName(context, name)
                                 profileName = NotebookAppSettingsStore.profileName
@@ -779,6 +791,63 @@ private fun NotebookNotePreview(body: String, maxLines: Int, modifier: Modifier 
     )
 }
 
+@Composable
+private fun ChecklistTaskTimeLimitStatus(item: NotebookChecklistItem) {
+    val limit = ChecklistTaskTimeLimit.from(item)
+    if (limit.type == ChecklistTaskTimeLimitType.NONE) return
+    if (item.isChecked) {
+        Text(uiText("Completed"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val dueAt = limit.dueAt()
+    if (dueAt == null) {
+        Text(uiText("Countdown not started"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+        return
+    }
+    var now by remember(item.id, dueAt) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(item.id, dueAt, item.isChecked) {
+        while (!item.isChecked) {
+            delay(30_000L)
+            now = System.currentTimeMillis()
+        }
+    }
+    val overdueBy = now >= dueAt
+    val difference = if (overdueBy) now - dueAt else dueAt - now
+    val prefix = if (overdueBy) uiText("Overdue by") else uiText("Time left")
+    Text(
+        "$prefix · ${formatTaskTimeDuration(difference)}",
+        style = MaterialTheme.typography.labelSmall,
+        color = if (overdueBy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+private fun taskTimeLimitDescription(limit: ChecklistTaskTimeLimit): String = when (limit.type) {
+    ChecklistTaskTimeLimitType.NONE -> uiText("No limit")
+    ChecklistTaskTimeLimitType.DEADLINE -> DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(limit.deadlineAt!!))
+    ChecklistTaskTimeLimitType.COUNTDOWN -> buildString {
+        append(formatTaskTimeDuration(limit.countdownDurationMillis ?: 0L))
+        append(" · ")
+        append(
+            uiText(
+                when {
+                    limit.countdownStartedAt != null -> "Running"
+                    limit.startCountdownWhenSaved -> "Start when saved"
+                    else -> "Start manually"
+                },
+            ),
+        )
+    }
+}
+
+private fun formatTaskTimeDuration(millis: Long): String {
+    val totalMinutes = ((millis.coerceAtLeast(0L) + 59_999L) / 60_000L).coerceAtLeast(1L)
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours == 0L) "${totalMinutes}m" else "${hours}h ${minutes}m"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBack: () -> Unit) {
@@ -791,8 +860,12 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
     var newTitle by remember { mutableStateOf("") }
     var editingChecklist by remember { mutableStateOf<NotebookChecklist?>(null) }
     var renameTitle by remember { mutableStateOf("") }
-    var editingItem by remember { mutableStateOf<com.nahian.mypersonalnotebook.data.NotebookChecklistItem?>(null) }
+    var editingItem by remember { mutableStateOf<NotebookChecklistItem?>(null) }
     var editingItemText by remember { mutableStateOf("") }
+    var editingItemTimeLimit by remember { mutableStateOf(ChecklistTaskTimeLimit.None) }
+    var newItemTimeLimit by remember(openChecklistId) { mutableStateOf(ChecklistTaskTimeLimit.None) }
+    var showNewItemTimeLimitDialog by remember { mutableStateOf(false) }
+    var showEditingItemTimeLimitDialog by remember { mutableStateOf(false) }
     var pendingDeleteChecklist by remember { mutableStateOf<NotebookChecklist?>(null) }
     val openChecklist = checklists.firstOrNull { it.checklist.id == openChecklistId }
 
@@ -917,16 +990,34 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
                             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                                 Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 5.dp, bottom = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(checked = task.isChecked, onCheckedChange = { checked -> scope.launch { repository.setChecklistItemChecked(list.checklist.id, task.id, checked) } })
-                                    Text(
-                                        task.text,
+                                    Column(
                                         modifier = Modifier.weight(1f).clickable { scope.launch { repository.setChecklistItemChecked(list.checklist.id, task.id, !task.isChecked) } },
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = if (task.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    ) {
+                                        Text(
+                                            task.text,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = if (task.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        ChecklistTaskTimeLimitStatus(task)
+                                    }
+                                    if (!task.isChecked && task.countdownDurationMillis != null && task.countdownStartedAt == null) {
+                                        TextButton(onClick = {
+                                            scope.launch {
+                                                when (val result = repository.startChecklistItemCountdown(list.checklist.id, task.id)) {
+                                                    ContentResult.Success -> Unit
+                                                    is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                                                }
+                                            }
+                                        }) { Text(uiText("Start")) }
+                                    }
                                     if (isEditingChecklist) {
-                                        IconButton(onClick = { editingItemText = task.text; editingItem = task }) {
+                                        IconButton(onClick = {
+                                            editingItemText = task.text
+                                            editingItemTimeLimit = ChecklistTaskTimeLimit.from(task)
+                                            editingItem = task
+                                        }) {
                                             Icon(Icons.Filled.Edit, contentDescription = uiText("Edit task"))
                                         }
                                         IconButton(onClick = { scope.launch { repository.deleteChecklistItem(list.checklist.id, task.id) } }) {
@@ -938,23 +1029,31 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
                         }
                         if (isEditingChecklist) item {
                             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    OutlinedTextField(
-                                        value = newItem,
-                                        onValueChange = { newItem = it },
-                                        label = { Text(uiText("Add an item")) },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    TextButton(onClick = {
-                                        val value = newItem
-                                        if (value.isNotBlank()) scope.launch {
-                                            when (val result = repository.addChecklistItem(list.checklist.id, value)) {
-                                                ContentResult.Success -> newItem = ""
-                                                is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = newItem,
+                                            onValueChange = { newItem = it },
+                                            label = { Text(uiText("Add an item")) },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        TextButton(onClick = {
+                                            val value = newItem
+                                            if (value.isNotBlank()) scope.launch {
+                                                when (val result = repository.addChecklistItem(list.checklist.id, value, newItemTimeLimit)) {
+                                                    ContentResult.Success -> {
+                                                        newItem = ""
+                                                        newItemTimeLimit = ChecklistTaskTimeLimit.None
+                                                    }
+                                                    is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                                                }
                                             }
-                                        }
-                                    }) { Text(uiText("Add")) }
+                                        }) { Text(uiText("Add")) }
+                                    }
+                                    TextButton(onClick = { showNewItemTimeLimitDialog = true }) {
+                                        Text("${uiText("Task time limit")}: ${taskTimeLimitDescription(newItemTimeLimit)}")
+                                    }
                                 }
                             }
                         }
@@ -1002,16 +1101,23 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
         )
     }
 
-    editingItem?.let { task ->
+    editingItem?.takeUnless { showEditingItemTimeLimitDialog }?.let { task ->
         AlertDialog(
             onDismissRequest = { editingItem = null },
             title = { Text(uiText("Edit task")) },
-            text = { OutlinedTextField(value = editingItemText, onValueChange = { editingItemText = it }, label = { Text(uiText("Task")) }) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = editingItemText, onValueChange = { editingItemText = it }, label = { Text(uiText("Task")) })
+                    TextButton(onClick = { showEditingItemTimeLimitDialog = true }) {
+                        Text("${uiText("Task time limit")}: ${taskTimeLimitDescription(editingItemTimeLimit)}")
+                    }
+                }
+            },
             confirmButton = {
                 Button(onClick = {
                     val currentListId = openChecklist?.checklist?.id
                     if (currentListId != null) scope.launch {
-                        when (val result = repository.updateChecklistItem(currentListId, task.id, editingItemText)) {
+                        when (val result = repository.updateChecklistItem(currentListId, task.id, editingItemText, editingItemTimeLimit)) {
                             ContentResult.Success -> editingItem = null
                             is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
                         }
@@ -1019,6 +1125,21 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
                 }) { Text(uiText("Save")) }
             },
             dismissButton = { TextButton(onClick = { editingItem = null }) { Text(uiText("Cancel")) } },
+        )
+    }
+
+    if (showNewItemTimeLimitDialog) {
+        ChecklistTaskTimeLimitDialog(
+            initialLimit = newItemTimeLimit,
+            onDismiss = { showNewItemTimeLimitDialog = false },
+            onSave = { newItemTimeLimit = it; showNewItemTimeLimitDialog = false },
+        )
+    }
+    if (showEditingItemTimeLimitDialog) {
+        ChecklistTaskTimeLimitDialog(
+            initialLimit = editingItemTimeLimit,
+            onDismiss = { showEditingItemTimeLimitDialog = false },
+            onSave = { editingItemTimeLimit = it; showEditingItemTimeLimitDialog = false },
         )
     }
 

@@ -6,7 +6,7 @@ A native Android notebook and reminders app. It opens on a colorful Summary dash
 
 - **Summary dashboard:** Opens at launch and shows colorful activity bars for notes, checklists, completed/remaining tasks, and active reminders, plus recent notes and shortcuts into each section.
 - **Notes:** Full-screen editor for longer writing, debounced local autosave, one-tap copy, and lightweight formatting for headings, bold, italic, underline, highlight, strike-through, list items, alignment, and sans/serif/monospace fonts. Formatting metadata is stored in the existing note body field, so no Room schema migration is needed; older plain-text notes remain readable.
-- **Checklists:** Folder-style cards open into a task view. Checking tasks is available in view mode; an explicit Edit action enables rename, add, edit, and delete controls.
+- **Checklists:** Folder-style cards open into a task view. Checking tasks is available in view mode; an explicit Edit action enables rename, add, edit, and delete controls. Tasks can have a fixed date/time deadline or a countdown that starts when the task is saved or later through an explicit Start action. Overdue alarms repeat until completion; Reminder Settings controls the repeat interval (default 5 minutes, 1–120 minutes). Existing checklist data is preserved by a non-destructive Room migration. Build/device verification is still required for this addition.
 - **Profile and settings:** Local profile name and profile picture, Dark/Light/System theme choices, app version, alert settings, and a Help & App Info page. The profile photo is resized and stored in app-private files.
 - **Automatic backup:** Android Auto Backup rules include the Room databases, preferences, and profile photo for cloud backup and device transfer. It requires Android backup to be enabled for a Google account on the device; Android decides when backup runs. This is OS-managed backup, not an in-app Google sign-in or instant cross-device sync. Local data remains on the phone.
 - **Time reminders:** One-time date-and-time alarms backed by Android `AlarmManager`, restored after reboot/app replacement. Notifications request the device's default alarm sound and vibration and include Done, Snooze 10 min, and Open actions. Android notification-channel, volume, Do Not Disturb, exact-alarm, battery, and OS settings can affect delivery.
@@ -24,11 +24,11 @@ A native Android notebook and reminders app. It opens on a colorful Summary dash
 - **Branding:** Launcher name is **NAHIAN'S NOTEBOOK**, with a custom adaptive notebook icon.
 - **AI assistant:** Intentionally hidden/deferred until a secure integration can be provided.
 
-## Still awaiting design or implementation
+## Deferred or awaiting external setup
 
-- Per-task time limits/overdue alerts need a product decision: should each task have a **fixed due date/time** or a **countdown duration**?
-- In-app Google sign-in and live cross-device synchronization are not implemented. Current backup relies on Android's secure, device-level Google backup and is not a real-time sync service.
-- A permanent link to this chat is not available; the Settings/Help page links to GitHub Actions as the available updates alternative.
+- Secure in-app Google Drive backup/sign-in and live cross-device synchronization are deferred until a secure OAuth setup and stable app-signing configuration are available. Android Auto Backup remains enabled as the OS-managed option; it is not instant sync.
+- A permanent link to this chat is not available. Settings/Help links to GitHub Actions for updates; add a chat link only if a persistent URL is provided.
+- A successful cloud build does not replace testing on a real Android phone. Do not treat the checklist time-limit feature or any other flow as device-verified until that testing is done.
 
 ## Install from an Android phone
 
@@ -51,12 +51,12 @@ Map tiles and geocoder search may require connectivity. Once registered, geofenc
 
 ## Verification status
 
-The current code build, [36294489997](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36294489997), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. This verifies compilation and tests, **not** installation or behavior on a real Android phone. All new flows still require device testing; do not treat them as device-verified until then.
+The earlier baseline build, [36294489997](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36294489997), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. The current checklist time-limit changes have not yet been built or tested; a fresh cloud CI run is required. Even a passing build verifies compilation and JVM tests, **not** installation or behavior on a real Android phone. Do not treat any flow as device-verified until then.
 
 Phone testing should cover:
 
 1. Notes: long text entry and scrolling, autosave after edits and app close, rich formatting persistence, old-note compatibility, copying, edit/delete, restart, and data persistence.
-2. Checklists: folder open/back, checking in view mode, edit-mode-only add/rename/task edit/delete, and persistence after restart.
+2. Checklists: folder open/back, checking in view mode, edit-mode-only add/rename/task edit/delete, and persistence after restart. Test a fixed deadline, a countdown starting on save, a manual countdown started with **Start**, overdue notification sound/vibration, repeat timing at the configured (default 5-minute) interval, marking complete from the notification and app, cancellation on delete, reboot/app update restoration, notification-denied recovery, and changing a time limit without losing existing list data.
 3. Dashboard chart counts and layout, long text fitting, profile photo selection/removal, Settings/Help version, and both update/Android settings links.
 4. Android backup enabled and disabled: confirm local data stays available offline, and test device/account restore where supported.
 5. Bangla/English display and voice-command chooser, including device support for Bangla speech recognition.

@@ -308,7 +308,7 @@ internal fun NotebookAppRoot(
                                     context.startActivity(
                                         Intent(
                                             Intent.ACTION_VIEW,
-                                            Uri.parse("https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/workflows/android-debug.yml?query=branch%3Amain"),
+                                            Uri.parse("https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/workflows/android-debug.yml?query=branch%3Aarena%2F01a0d731-my-personal-notebook"),
                                         ),
                                     )
                                 } catch (_: ActivityNotFoundException) {

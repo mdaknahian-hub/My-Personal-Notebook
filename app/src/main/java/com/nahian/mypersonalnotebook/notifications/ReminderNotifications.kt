@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -19,15 +21,24 @@ import com.nahian.mypersonalnotebook.ui.NotebookLanguageSettings
 import com.nahian.mypersonalnotebook.ui.uiText
 
 object ReminderNotifications {
-    const val CHANNEL_ID = "location_reminders_high"
+    const val CHANNEL_ID = "location_reminders_alarm_v2"
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = manager.getNotificationChannel(CHANNEL_ID)
-            ?: NotificationChannel(CHANNEL_ID, uiText("Location reminders"), NotificationManager.IMPORTANCE_HIGH)
+            ?: NotificationChannel(CHANNEL_ID, uiText("Location reminders"), NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(
+                    Settings.System.DEFAULT_ALARM_ALERT_URI,
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500)
+            }
         channel.name = uiText("Location reminders")
         channel.description = uiText("Alerts when you enter or leave places you selected")
-        channel.enableVibration(true)
         channel.setShowBadge(true)
         manager.createNotificationChannel(channel)
     }
@@ -78,8 +89,8 @@ object ReminderNotifications {
             .setSubText(reminder.title)
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setOnlyAlertOnce(false)
 
@@ -98,6 +109,9 @@ object ReminderNotifications {
             uiText("Open"),
             actionPendingIntent(context, reminder, ReminderActionReceiver.ACTION_OPEN),
         )
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setSound(Settings.System.DEFAULT_ALARM_ALERT_URI).setVibrate(longArrayOf(0, 500, 250, 500))
+        }
 
         try {
             NotificationManagerCompat.from(context).notify(reminder.notificationId, builder.build())

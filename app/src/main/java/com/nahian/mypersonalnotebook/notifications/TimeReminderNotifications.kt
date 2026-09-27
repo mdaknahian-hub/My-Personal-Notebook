@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -22,15 +24,24 @@ import java.text.DateFormat
 import java.util.Date
 
 object TimeReminderNotifications {
-    const val CHANNEL_ID = "scheduled_reminders_high"
+    const val CHANNEL_ID = "scheduled_reminders_alarm_v2"
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = manager.getNotificationChannel(CHANNEL_ID)
-            ?: NotificationChannel(CHANNEL_ID, uiText("Scheduled reminders"), NotificationManager.IMPORTANCE_HIGH)
+            ?: NotificationChannel(CHANNEL_ID, uiText("Scheduled reminders"), NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(
+                    Settings.System.DEFAULT_ALARM_ALERT_URI,
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500)
+            }
         channel.name = uiText("Scheduled reminders")
         channel.description = uiText("Notifications for reminders scheduled by date and time")
-        channel.enableVibration(true)
         channel.setShowBadge(true)
         manager.createNotificationChannel(channel)
     }
@@ -76,13 +87,16 @@ object TimeReminderNotifications {
             .setSubText(uiText("Scheduled reminder"))
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setOnlyAlertOnce(false)
             .addAction(0, uiText("Done"), actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_DONE))
             .addAction(0, uiText("Snooze 10 min"), actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_SNOOZE))
             .addAction(0, uiText("Open"), actionPendingIntent(context, reminder, TimeReminderActionReceiver.ACTION_OPEN))
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setSound(Settings.System.DEFAULT_ALARM_ALERT_URI).setVibrate(longArrayOf(0, 500, 250, 500))
+        }
         return try {
             NotificationManagerCompat.from(context).notify(reminder.notificationId, builder.build())
             true

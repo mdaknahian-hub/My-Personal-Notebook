@@ -12,8 +12,10 @@
 
     <application
         android:name=".NotebookApplication"
-        android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
         android:label="NAHIAN'S NOTEBOOK"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyPersonalNotebook"

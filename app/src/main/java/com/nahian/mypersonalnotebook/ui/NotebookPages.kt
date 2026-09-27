@@ -2,7 +2,12 @@ package com.nahian.mypersonalnotebook.ui
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +21,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,8 +42,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
@@ -66,12 +76,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,7 +98,11 @@ import com.nahian.mypersonalnotebook.data.TimeReminderRepository
 import com.nahian.mypersonalnotebook.domain.NotebookVoiceCommands
 import com.nahian.mypersonalnotebook.domain.NotebookVoiceDestination
 import com.nahian.mypersonalnotebook.widget.NotebookWidgetProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
 private enum class NotebookSection {
     SUMMARY,
@@ -112,8 +129,14 @@ internal fun NotebookAppRoot(
     val voiceSnackbar = remember { SnackbarHostState() }
     var language by remember { mutableStateOf(NotebookLanguageSettings.current) }
     var profileName by remember { mutableStateOf(NotebookAppSettingsStore.profileName) }
+    var profilePhotoPath by remember { mutableStateOf(NotebookAppSettingsStore.profilePhotoPath) }
+    val appVersionName = remember(context) {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "1.0.0"
+    }
     var pendingReminderId by remember(initialReminderId) { mutableStateOf(initialReminderId) }
     var locationNavigationVisible by remember { mutableStateOf(true) }
+    var showVoiceLanguageDialog by remember { mutableStateOf(false) }
+    var noteEditorOpen by remember { mutableStateOf(false) }
     var section by remember(initialReminderId, initialOpenSection) {
         mutableStateOf(
             when {
@@ -134,6 +157,7 @@ internal fun NotebookAppRoot(
     }
     val reminders by locationRepository.observeReminders().collectAsState(initial = emptyList())
     val recentNotes by contentRepository.observeRecentNotes().collectAsState(initial = emptyList())
+    val allNotes by contentRepository.observeNotes().collectAsState(initial = emptyList())
     val checklists by contentRepository.observeChecklists().collectAsState(initial = emptyList())
     val timeReminders by timeReminderRepository.observeAll().collectAsState(initial = emptyList())
 
@@ -165,18 +189,25 @@ internal fun NotebookAppRoot(
         }
     }
 
-    fun startVoiceCommand() {
+    fun launchVoiceCommand(languageTag: String) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (language == NotebookLanguage.BANGLA) "bn-BD" else "en-US")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, uiText("Say a command like open notes."))
+            putExtra(
+                RecognizerIntent.EXTRA_PROMPT,
+                if (languageTag == "bn-BD") "কমান্ড বলুন, যেমন নোট খুলুন।" else "Say a command like open notes.",
+            )
         }
         try {
             voiceLauncher.launch(intent)
         } catch (_: ActivityNotFoundException) {
             scope.launch { voiceSnackbar.showSnackbar(uiText("Voice recognition is unavailable on this device.")) }
         }
+    }
+
+    fun startVoiceCommand() {
+        showVoiceLanguageDialog = true
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -203,6 +234,7 @@ internal fun NotebookAppRoot(
                             registeredLocationReminders = reminders.count { it.enabled && it.registered },
                             checklists = checklists,
                             recentNotes = recentNotes,
+                            noteCount = allNotes.size,
                             onOpenReminders = { section = NotebookSection.LOCATION_REMINDERS },
                             onOpenTimeReminders = { section = NotebookSection.TIME_REMINDERS },
                             onOpenChecklists = { section = NotebookSection.CHECKLISTS },
@@ -230,18 +262,59 @@ internal fun NotebookAppRoot(
                         NotebookSection.NOTES -> NotebookNotesScreen(
                             repository = contentRepository,
                             onBack = { section = NotebookSection.SUMMARY },
+                            onEditorVisibilityChange = { noteEditorOpen = it },
                         )
                         NotebookSection.SETTINGS -> NotebookSettingsScreen(
                             profileName = profileName,
+                            profilePhotoPath = profilePhotoPath,
                             themeMode = themeMode,
                             language = language,
+                            appVersionName = appVersionName,
                             onSaveProfile = { name ->
                                 NotebookAppSettingsStore.saveProfileName(context, name)
                                 profileName = NotebookAppSettingsStore.profileName
                             },
+                            onSaveProfilePhoto = { uri ->
+                                val savedPath = withContext(Dispatchers.IO) { NotebookAppSettingsStore.saveProfilePhoto(context, uri) }
+                                profilePhotoPath = savedPath
+                                savedPath
+                            },
                             onThemeModeChange = onThemeModeChange,
                             onToggleLanguage = ::toggleLanguage,
                             onVoiceCommand = ::startVoiceCommand,
+                            onOpenAlertSettings = {
+                                try {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                                    )
+                                } catch (_: ActivityNotFoundException) {
+                                    scope.launch { voiceSnackbar.showSnackbar(uiText("Android notification settings could not be opened.")) }
+                                }
+                            },
+                            onOpenBackupSettings = {
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_BACKUP_SETTINGS))
+                                } catch (_: ActivityNotFoundException) {
+                                    try {
+                                        context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                                    } catch (_: ActivityNotFoundException) {
+                                        scope.launch { voiceSnackbar.showSnackbar(uiText("Android backup settings could not be opened.")) }
+                                    }
+                                }
+                            },
+                            onOpenUpdates = {
+                                try {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/workflows/android-debug.yml?query=branch%3Amain"),
+                                        ),
+                                    )
+                                } catch (_: ActivityNotFoundException) {
+                                    scope.launch { voiceSnackbar.showSnackbar(uiText("No browser is available to open the updates page.")) }
+                                }
+                            },
                         )
                     }
                 }
@@ -251,12 +324,27 @@ internal fun NotebookAppRoot(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
             )
         }
-        if (locationNavigationVisible || section != NotebookSection.LOCATION_REMINDERS) {
+        if ((locationNavigationVisible || section != NotebookSection.LOCATION_REMINDERS) && !noteEditorOpen) {
             NotebookNavigationBar(
                 section = section,
                 onSelect = { section = it },
             )
         }
+    }
+
+    if (showVoiceLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showVoiceLanguageDialog = false },
+            title = { Text(uiText("Choose voice command language")) },
+            text = { Text(uiText("Choose the language you will speak.")) },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showVoiceLanguageDialog = false; launchVoiceCommand("en-US") }) { Text(uiText("English")) }
+                    TextButton(onClick = { showVoiceLanguageDialog = false; launchVoiceCommand("bn-BD") }) { Text(uiText("Bangla")) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showVoiceLanguageDialog = false }) { Text(uiText("Cancel")) } },
+        )
     }
 }
 
@@ -316,6 +404,7 @@ private fun NotebookSummaryScreen(
     registeredLocationReminders: Int,
     checklists: List<ChecklistWithItems>,
     recentNotes: List<NotebookNote>,
+    noteCount: Int,
     onOpenReminders: () -> Unit,
     onOpenTimeReminders: () -> Unit,
     onOpenChecklists: () -> Unit,
@@ -337,8 +426,14 @@ private fun NotebookSummaryScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(uiText("NAHIAN'S NOTEBOOK"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(welcomeText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            uiText("NAHIAN'S NOTEBOOK"),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(welcomeText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 actions = {
@@ -372,6 +467,15 @@ private fun NotebookSummaryScreen(
                         )
                     }
                 }
+            }
+            item {
+                NotebookActivityChart(
+                    noteCount = noteCount,
+                    checklistCount = checklists.size,
+                    completedTasks = checklists.sumOf { it.completedCount },
+                    remainingTasks = outstandingItems,
+                    reminderCount = activeTimeReminders + activeLocationReminders,
+                )
             }
             item {
                 SummaryActionCard(
@@ -419,22 +523,55 @@ private fun NotebookSummaryScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text(if (note.title.isBlank()) uiText("Untitled note") else note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            if (note.body.isNotBlank()) {
-                                Text(
-                                    note.body,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(top = 5.dp),
-                                )
-                            }
+                            Text(
+                                if (note.title.isBlank()) uiText("Untitled note") else note.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (note.body.isNotBlank()) NotebookNotePreview(note.body, maxLines = 2, modifier = Modifier.padding(top = 5.dp))
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NotebookActivityChart(
+    noteCount: Int,
+    checklistCount: Int,
+    completedTasks: Int,
+    remainingTasks: Int,
+    reminderCount: Int,
+) {
+    val maximum = maxOf(noteCount, checklistCount, completedTasks, remainingTasks, reminderCount, 1)
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(uiText("Notebook activity"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            ActivityBar(uiText("Notes"), noteCount, maximum, MaterialTheme.colorScheme.primary)
+            ActivityBar(uiText("Checklists"), checklistCount, maximum, MaterialTheme.colorScheme.secondary)
+            ActivityBar(uiText("Tasks complete"), completedTasks, maximum, MaterialTheme.colorScheme.tertiary)
+            ActivityBar(uiText("Tasks remaining"), remainingTasks, maximum, MaterialTheme.colorScheme.error)
+            ActivityBar(uiText("Reminders"), reminderCount, maximum, MaterialTheme.colorScheme.secondary)
+        }
+    }
+}
+
+@Composable
+private fun ActivityBar(label: String, value: Int, maximum: Int, tint: androidx.compose.ui.graphics.Color) {
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text(label, modifier = Modifier.width(104.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Canvas(Modifier.weight(1f).height(9.dp)) {
+            val radius = CornerRadius(size.height / 2f)
+            drawRoundRect(color = trackColor, cornerRadius = radius)
+            val fraction = (value.toFloat() / maximum).coerceIn(0f, 1f)
+            if (fraction > 0f) drawRoundRect(color = tint, size = Size(size.width * fraction, size.height), cornerRadius = radius)
+        }
+        Text(value.toString(), modifier = Modifier.width(24.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -454,8 +591,8 @@ private fun SummaryActionCard(
                 androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) { icon() }
             }
             Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                Text(uiText(title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(uiText(subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText(title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(uiText(subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -463,93 +600,152 @@ private fun SummaryActionCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NotebookNotesScreen(repository: NotebookContentRepository, onBack: () -> Unit) {
+private fun NotebookNotesScreen(
+    repository: NotebookContentRepository,
+    onBack: () -> Unit,
+    onEditorVisibilityChange: (Boolean) -> Unit,
+) {
     val notes by repository.observeNotes().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var editorOpen by remember { mutableStateOf(false) }
-    var editingNote by remember { mutableStateOf<NotebookNote?>(null) }
+    var editingNoteId by remember { mutableStateOf<String?>(null) }
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
+    var isDirty by remember { mutableStateOf(false) }
+    var saveStatus by remember { mutableStateOf("Saved on this device") }
     var pendingDelete by remember { mutableStateOf<NotebookNote?>(null) }
 
+    LaunchedEffect(editorOpen) { onEditorVisibilityChange(editorOpen) }
+
     fun openEditor(note: NotebookNote?) {
-        editingNote = note
+        editingNoteId = note?.id ?: UUID.randomUUID().toString()
         title = note?.title.orEmpty()
         body = note?.body.orEmpty()
+        isDirty = false
+        saveStatus = "Saved on this device"
         editorOpen = true
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(uiText("Notebook")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to summary") }
-                },
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { openEditor(null) }, icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text(uiText("New note")) })
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        if (notes.isEmpty()) {
-            Column(
-                Modifier.fillMaxSize().padding(padding).padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(Icons.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp))
-                Text(uiText("Your notebook is ready"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
-                Text(uiText("Create a note; it will be saved on this device."), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                Button(onClick = { openEditor(null) }, modifier = Modifier.padding(top = 16.dp)) { Text(uiText("Create first note")) }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 100.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(notes, key = { it.id }) { note ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.Top) {
-                            Column(Modifier.weight(1f).clickable { openEditor(note) }) {
-                                Text(if (note.title.isBlank()) uiText("Untitled note") else note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                if (note.body.isNotBlank()) {
-                                    Text(note.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
-                                }
-                            }
-                            IconButton(onClick = { openEditor(note) }) { Icon(Icons.Filled.Edit, contentDescription = "Edit note") }
-                            IconButton(onClick = { pendingDelete = note }) { Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete note") }
-                        }
-                    }
+    fun copyText(copyTitle: String, copyBody: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val plainBody = renderNotebookNote(copyBody).text
+        val copiedNote = when {
+            copyTitle.isBlank() -> plainBody
+            plainBody.isBlank() -> copyTitle
+            else -> "$copyTitle\n\n$plainBody"
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText(copyTitle.ifBlank { "NAHIAN'S NOTEBOOK" }, copiedNote))
+        scope.launch { snackbar.showSnackbar(uiText("Note copied to clipboard.")) }
+    }
+
+    fun saveAndClose() {
+        if (!isDirty) {
+            editorOpen = false
+            return
+        }
+        if (title.isBlank() && body.isBlank()) {
+            editorOpen = false
+            return
+        }
+        scope.launch {
+            when (val result = repository.saveNote(editingNoteId, title, body)) {
+                ContentResult.Success -> {
+                    isDirty = false
+                    saveStatus = "Saved on this device"
+                    editorOpen = false
+                }
+                is ContentResult.Error -> {
+                    saveStatus = result.message
+                    snackbar.showSnackbar(uiText(result.message))
                 }
             }
         }
     }
 
-    if (editorOpen) {
-        AlertDialog(
-            onDismissRequest = { editorOpen = false },
-            title = { Text(uiText(if (editingNote == null) "New note" else "Edit note")) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(uiText("Title")) }, singleLine = true)
-                    OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text(uiText("Write your note")) }, minLines = 4)
-                }
+    BackHandler(enabled = editorOpen) { saveAndClose() }
+
+    LaunchedEffect(editorOpen, editingNoteId, title, body, isDirty) {
+        if (!editorOpen || !isDirty || (title.isBlank() && body.isBlank())) return@LaunchedEffect
+        saveStatus = "Saving…"
+        delay(650)
+        when (val result = repository.saveNote(editingNoteId, title, body)) {
+            ContentResult.Success -> {
+                isDirty = false
+                saveStatus = "Saved on this device"
+            }
+            is ContentResult.Error -> {
+                saveStatus = result.message
+                snackbar.showSnackbar(uiText(result.message))
+            }
+        }
+    }
+
+    if (!editorOpen) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(uiText("Notebook"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText("Back to summary")) }
+                    },
+                )
             },
-            confirmButton = {
-                Button(onClick = {
-                    scope.launch {
-                        when (val result = repository.saveNote(editingNote?.id, title, body)) {
-                            ContentResult.Success -> editorOpen = false
-                            is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+            floatingActionButton = {
+                ExtendedFloatingActionButton(onClick = { openEditor(null) }, icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text(uiText("New note")) })
+            },
+            snackbarHost = { SnackbarHost(snackbar) },
+        ) { padding ->
+            if (notes.isEmpty()) {
+                Column(
+                    Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(Icons.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp))
+                    Text(uiText("Your notebook is ready"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+                    Text(uiText("Create a note; it will be saved on this device."), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                    Button(onClick = { openEditor(null) }, modifier = Modifier.padding(top = 16.dp)) { Text(uiText("Create first note")) }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(notes, key = { it.id }) { note ->
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+                                Column(Modifier.weight(1f).clickable { openEditor(note) }.padding(vertical = 6.dp)) {
+                                    Text(
+                                        if (note.title.isBlank()) uiText("Untitled note") else note.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (note.body.isNotBlank()) NotebookNotePreview(note.body, maxLines = 3, modifier = Modifier.padding(top = 5.dp))
+                                }
+                                IconButton(onClick = { copyText(note.title, note.body) }) { Icon(Icons.Filled.ContentCopy, contentDescription = uiText("Copy note")) }
+                                IconButton(onClick = { openEditor(note) }) { Icon(Icons.Filled.Edit, contentDescription = uiText("Edit note")) }
+                                IconButton(onClick = { pendingDelete = note }) { Icon(Icons.Filled.DeleteOutline, contentDescription = uiText("Delete note")) }
+                            }
                         }
                     }
-                }) { Text(uiText("Save")) }
-            },
-            dismissButton = { TextButton(onClick = { editorOpen = false }) { Text(uiText("Cancel")) } },
+                }
+            }
+        }
+    } else {
+        NotebookNoteEditorScreen(
+            noteKey = editingNoteId.orEmpty(),
+            title = title,
+            serializedBody = body,
+            saveStatus = saveStatus,
+            onTitleChange = { title = it; isDirty = true },
+            onBodyChange = { body = it; isDirty = true },
+            onCopy = { copyText(title, body) },
+            onClose = ::saveAndClose,
         )
     }
 
@@ -569,32 +765,100 @@ private fun NotebookNotesScreen(repository: NotebookContentRepository, onBack: (
     }
 }
 
+@Composable
+private fun NotebookNotePreview(body: String, maxLines: Int, modifier: Modifier = Modifier) {
+    val document = remember(body) { decodeNotebookNote(body) }
+    Text(
+        text = renderNotebookNote(body),
+        modifier = modifier,
+        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = document.font.family),
+        textAlign = document.alignment.textAlign,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBack: () -> Unit) {
     val checklists by repository.observeChecklists().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    var openChecklistId by remember { mutableStateOf<String?>(null) }
+    var isEditingChecklist by remember(openChecklistId) { mutableStateOf(false) }
     var createOpen by remember { mutableStateOf(false) }
     var newTitle by remember { mutableStateOf("") }
-    var pendingDelete by remember { mutableStateOf<NotebookChecklist?>(null) }
+    var editingChecklist by remember { mutableStateOf<NotebookChecklist?>(null) }
+    var renameTitle by remember { mutableStateOf("") }
+    var editingItem by remember { mutableStateOf<com.nahian.mypersonalnotebook.data.NotebookChecklistItem?>(null) }
+    var editingItemText by remember { mutableStateOf("") }
+    var pendingDeleteChecklist by remember { mutableStateOf<NotebookChecklist?>(null) }
+    val openChecklist = checklists.firstOrNull { it.checklist.id == openChecklistId }
+
+    BackHandler(enabled = openChecklistId != null) {
+        if (isEditingChecklist) isEditingChecklist = false else openChecklistId = null
+    }
+    LaunchedEffect(openChecklistId, checklists) {
+        if (openChecklistId != null && openChecklist == null) openChecklistId = null
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiText("Checklists")) },
+                title = {
+                    Text(
+                        text = openChecklist?.checklist?.title ?: uiText("Checklists"),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to summary") }
+                    IconButton(onClick = {
+                        when {
+                            openChecklist == null -> onBack()
+                            isEditingChecklist -> isEditingChecklist = false
+                            else -> openChecklistId = null
+                        }
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (openChecklist == null) uiText("Back to summary") else uiText("Back to checklists"))
+                    }
+                },
+                actions = {
+                    if (openChecklist != null) {
+                        if (isEditingChecklist) {
+                            TextButton(onClick = {
+                                renameTitle = openChecklist.checklist.title
+                                editingChecklist = openChecklist.checklist
+                            }) { Text(uiText("Rename")) }
+                            IconButton(onClick = { pendingDeleteChecklist = openChecklist.checklist }) {
+                                Icon(Icons.Filled.DeleteOutline, contentDescription = uiText("Delete checklist"))
+                            }
+                            IconButton(onClick = { isEditingChecklist = false }) {
+                                Icon(Icons.Filled.Done, contentDescription = uiText("Finish editing"))
+                            }
+                        } else {
+                            IconButton(onClick = { isEditingChecklist = true }) {
+                                Icon(Icons.Filled.Edit, contentDescription = uiText("Edit checklist"))
+                            }
+                        }
+                    }
                 },
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { newTitle = ""; createOpen = true }, icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text(uiText("New checklist")) })
+            if (openChecklist == null) {
+                ExtendedFloatingActionButton(
+                    onClick = { newTitle = ""; createOpen = true },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text(uiText("New checklist")) },
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        if (checklists.isEmpty()) {
-            Column(
+        when {
+            openChecklist == null && checklists.isEmpty() -> Column(
                 Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -604,27 +868,97 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
                 Text(uiText("Your checklists are saved on this device."), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                 Button(onClick = { createOpen = true }, modifier = Modifier.padding(top = 16.dp)) { Text(uiText("Create first checklist")) }
             }
-        } else {
-            LazyColumn(
+            openChecklist == null -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                item { Text(uiText("Your checklist folders"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                 items(checklists, key = { it.checklist.id }) { checklist ->
-                    ChecklistCard(
+                    ChecklistFolderCard(
                         checklist = checklist,
-                        onCheck = { item, checked -> scope.launch { repository.setChecklistItemChecked(checklist.checklist.id, item.id, checked) } },
-                        onAddItem = { text ->
-                            scope.launch {
-                                when (val result = repository.addChecklistItem(checklist.checklist.id, text)) {
-                                    ContentResult.Success -> Unit
-                                    is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                        onOpen = { openChecklistId = checklist.checklist.id },
+                        onEdit = { renameTitle = checklist.checklist.title; editingChecklist = checklist.checklist },
+                        onDelete = { pendingDeleteChecklist = checklist.checklist },
+                    )
+                }
+            }
+            else -> {
+                val currentChecklist = openChecklist
+                if (currentChecklist == null) {
+                    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                        Text(uiText("This checklist no longer exists."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    val list = currentChecklist
+                    var newItem by remember(list.checklist.id) { mutableStateOf("") }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 28.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        item {
+                            Text(
+                                if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "${list.items.size}টির মধ্যে ${list.completedCount}টি সম্পন্ন" else "${list.completedCount} of ${list.items.size} complete",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (list.items.isEmpty()) {
+                            item {
+                                Text(
+                                    uiText(if (isEditingChecklist) "No tasks yet. Add your first task below." else "No tasks yet. Choose Edit to add your first task."),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                )
+                            }
+                        }
+                        items(list.items, key = { it.id }) { task ->
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                                Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 5.dp, bottom = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = task.isChecked, onCheckedChange = { checked -> scope.launch { repository.setChecklistItemChecked(list.checklist.id, task.id, checked) } })
+                                    Text(
+                                        task.text,
+                                        modifier = Modifier.weight(1f).clickable { scope.launch { repository.setChecklistItemChecked(list.checklist.id, task.id, !task.isChecked) } },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = if (task.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (isEditingChecklist) {
+                                        IconButton(onClick = { editingItemText = task.text; editingItem = task }) {
+                                            Icon(Icons.Filled.Edit, contentDescription = uiText("Edit task"))
+                                        }
+                                        IconButton(onClick = { scope.launch { repository.deleteChecklistItem(list.checklist.id, task.id) } }) {
+                                            Icon(Icons.Filled.DeleteOutline, contentDescription = uiText("Delete checklist item"))
+                                        }
+                                    }
                                 }
                             }
-                        },
-                        onDeleteItem = { item -> scope.launch { repository.deleteChecklistItem(checklist.checklist.id, item.id) } },
-                        onDeleteList = { pendingDelete = checklist.checklist },
-                    )
+                        }
+                        if (isEditingChecklist) item {
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(
+                                        value = newItem,
+                                        onValueChange = { newItem = it },
+                                        label = { Text(uiText("Add an item")) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(onClick = {
+                                        val value = newItem
+                                        if (value.isNotBlank()) scope.launch {
+                                            when (val result = repository.addChecklistItem(list.checklist.id, value)) {
+                                                ContentResult.Success -> newItem = ""
+                                                is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                                            }
+                                        }
+                                    }) { Text(uiText("Add")) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -649,69 +983,86 @@ private fun NotebookChecklistsScreen(repository: NotebookContentRepository, onBa
         )
     }
 
-    pendingDelete?.let { checklist ->
+    editingChecklist?.let { checklist ->
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
+            onDismissRequest = { editingChecklist = null },
+            title = { Text(uiText("Edit checklist")) },
+            text = { OutlinedTextField(value = renameTitle, onValueChange = { renameTitle = it }, label = { Text(uiText("Checklist name")) }, singleLine = true) },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        when (val result = repository.renameChecklist(checklist.id, renameTitle)) {
+                            ContentResult.Success -> editingChecklist = null
+                            is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                        }
+                    }
+                }) { Text(uiText("Save")) }
+            },
+            dismissButton = { TextButton(onClick = { editingChecklist = null }) { Text(uiText("Cancel")) } },
+        )
+    }
+
+    editingItem?.let { task ->
+        AlertDialog(
+            onDismissRequest = { editingItem = null },
+            title = { Text(uiText("Edit task")) },
+            text = { OutlinedTextField(value = editingItemText, onValueChange = { editingItemText = it }, label = { Text(uiText("Task")) }) },
+            confirmButton = {
+                Button(onClick = {
+                    val currentListId = openChecklist?.checklist?.id
+                    if (currentListId != null) scope.launch {
+                        when (val result = repository.updateChecklistItem(currentListId, task.id, editingItemText)) {
+                            ContentResult.Success -> editingItem = null
+                            is ContentResult.Error -> snackbar.showSnackbar(uiText(result.message))
+                        }
+                    }
+                }) { Text(uiText("Save")) }
+            },
+            dismissButton = { TextButton(onClick = { editingItem = null }) { Text(uiText("Cancel")) } },
+        )
+    }
+
+    pendingDeleteChecklist?.let { checklist ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteChecklist = null },
             title = { Text(uiText("Delete checklist?")) },
             text = { Text(uiText("The list and its items will be removed from this device.")) },
             confirmButton = {
                 Button(onClick = {
-                    pendingDelete = null
+                    pendingDeleteChecklist = null
+                    if (openChecklistId == checklist.id) openChecklistId = null
                     scope.launch { repository.deleteChecklist(checklist.id) }
                 }) { Text(uiText("Delete")) }
             },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(uiText("Cancel")) } },
+            dismissButton = { TextButton(onClick = { pendingDeleteChecklist = null }) { Text(uiText("Cancel")) } },
         )
     }
 }
 
 @Composable
-private fun ChecklistCard(
+private fun ChecklistFolderCard(
     checklist: ChecklistWithItems,
-    onCheck: (com.nahian.mypersonalnotebook.data.NotebookChecklistItem, Boolean) -> Unit,
-    onAddItem: (String) -> Unit,
-    onDeleteItem: (com.nahian.mypersonalnotebook.data.NotebookChecklistItem) -> Unit,
-    onDeleteList: () -> Unit,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
-    var newItem by remember(checklist.checklist.id) { mutableStateOf("") }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(checklist.checklist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "${checklist.items.size}টির মধ্যে ${checklist.completedCount}টি সম্পন্ন" else "${checklist.completedCount} of ${checklist.items.size} complete", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = onDeleteList) { Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete checklist") }
+        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(14.dp), modifier = Modifier.size(44.dp).clickable(onClick = onOpen)) {
+                Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
             }
-            if (checklist.items.isNotEmpty()) Spacer(Modifier.height(4.dp))
-            checklist.items.forEach { item ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = item.isChecked, onCheckedChange = { onCheck(item, it) })
-                    Text(
-                        item.text,
-                        modifier = Modifier.weight(1f).clickable { onCheck(item, !item.isChecked) },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (item.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    )
-                    IconButton(onClick = { onDeleteItem(item) }) { Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete checklist item") }
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = newItem,
-                    onValueChange = { newItem = it },
-                    label = { Text(uiText("Add an item")) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
+            Column(Modifier.weight(1f).clickable(onClick = onOpen).padding(start = 12.dp)) {
+                Text(checklist.checklist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (NotebookLanguageSettings.current == NotebookLanguage.BANGLA) "${checklist.remainingCount}টি কাজ বাকি · ${checklist.completedCount}টি সম্পন্ন" else "${checklist.remainingCount} tasks left · ${checklist.completedCount} complete",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                TextButton(
-                    onClick = {
-                        val value = newItem
-                        onAddItem(value)
-                        if (value.isNotBlank()) newItem = ""
-                    },
-                ) { Text(uiText("Add")) }
             }
+            IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = uiText("Edit checklist")) }
+            IconButton(onClick = onDelete) { Icon(Icons.Filled.DeleteOutline, contentDescription = uiText("Delete checklist")) }
         }
     }
 }

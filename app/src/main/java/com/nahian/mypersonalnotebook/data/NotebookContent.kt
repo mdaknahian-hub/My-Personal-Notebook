@@ -100,6 +100,9 @@ abstract class NotebookContentDao {
     @Query("SELECT * FROM notebook_checklist_items WHERE checklistId = :checklistId ORDER BY createdAt ASC")
     abstract suspend fun getChecklistItems(checklistId: String): List<NotebookChecklistItem>
 
+    @Query("SELECT * FROM notebook_checklist_items WHERE id = :id LIMIT 1")
+    abstract suspend fun getChecklistItem(id: String): NotebookChecklistItem?
+
     @Upsert
     abstract suspend fun upsertChecklistItem(item: NotebookChecklistItem)
 
@@ -171,7 +174,27 @@ class NotebookContentRepository(context: Context) {
         return ContentResult.Success
     }
 
+    suspend fun renameChecklist(id: String, title: String): ContentResult {
+        val cleaned = title.trim()
+        if (cleaned.isEmpty()) return ContentResult.Error("Give the checklist a name.")
+        val existing = dao.getChecklist(id) ?: return ContentResult.Error("This checklist no longer exists.")
+        dao.upsertChecklist(existing.copy(title = cleaned, updatedAt = System.currentTimeMillis()))
+        return ContentResult.Success
+    }
+
     suspend fun deleteChecklist(id: String) = dao.deleteChecklist(id)
+
+    suspend fun updateChecklistItem(checklistId: String, itemId: String, text: String): ContentResult {
+        val cleaned = text.trim()
+        if (cleaned.isEmpty()) return ContentResult.Error("Write a checklist item first.")
+        val existingList = dao.getChecklist(checklistId) ?: return ContentResult.Error("This checklist no longer exists.")
+        val existingItem = dao.getChecklistItem(itemId)?.takeIf { it.checklistId == checklistId }
+            ?: return ContentResult.Error("This checklist item no longer exists.")
+        val now = System.currentTimeMillis()
+        dao.upsertChecklistItem(existingItem.copy(text = cleaned))
+        dao.touchChecklist(existingList.id, now)
+        return ContentResult.Success
+    }
 
     suspend fun addChecklistItem(checklistId: String, text: String): ContentResult {
         val cleanText = text.trim()

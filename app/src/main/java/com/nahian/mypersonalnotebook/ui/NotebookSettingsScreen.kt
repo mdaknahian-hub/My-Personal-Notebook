@@ -1,6 +1,13 @@
 package com.nahian.mypersonalnotebook.ui
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,25 +51,62 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NotebookSettingsScreen(
     profileName: String,
+    profilePhotoPath: String?,
     themeMode: NotebookThemeMode,
     language: NotebookLanguage,
+    appVersionName: String,
     onSaveProfile: (String) -> Unit,
+    onSaveProfilePhoto: suspend (Uri?) -> String?,
     onThemeModeChange: (NotebookThemeMode) -> Unit,
     onToggleLanguage: () -> Unit,
     onVoiceCommand: () -> Unit,
+    onOpenAlertSettings: () -> Unit,
+    onOpenBackupSettings: () -> Unit,
+    onOpenUpdates: () -> Unit,
 ) {
     var name by remember(profileName) { mutableStateOf(profileName) }
     var savedName by remember(profileName) { mutableStateOf(profileName) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showHelp by remember { mutableStateOf(false) }
+    var profileBitmap by remember(profilePhotoPath) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(profilePhotoPath) {
+        profileBitmap = withContext(Dispatchers.IO) { profilePhotoPath?.let { path -> BitmapFactory.decodeFile(path) } }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                onSaveProfilePhoto(uri)
+                snackbar.showSnackbar(uiText("Profile photo saved on this device."))
+            } catch (exception: Exception) {
+                snackbar.showSnackbar(uiText(exception.message ?: "The profile photo could not be saved."))
+            }
+        }
+    }
+    BackHandler(enabled = showHelp) { showHelp = false }
+
+    if (showHelp) {
+        HelpAndAppInfoScreen(
+            versionName = appVersionName,
+            onBack = { showHelp = false },
+            onOpenAlertSettings = onOpenAlertSettings,
+            onOpenBackupSettings = onOpenBackupSettings,
+            onOpenUpdates = onOpenUpdates,
+        )
+        return
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(uiText("Settings")) }) },
@@ -84,7 +131,14 @@ internal fun NotebookSettingsScreen(
                                 modifier = Modifier.size(54.dp),
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    if (name.isBlank()) {
+                                    if (profileBitmap != null) {
+                                        Image(
+                                            bitmap = profileBitmap!!.asImageBitmap(),
+                                            contentDescription = uiText("Profile picture"),
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop,
+                                        )
+                                    } else if (name.isBlank()) {
                                         Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                                     } else {
                                         Text(name.trim().take(1).uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -97,7 +151,7 @@ internal fun NotebookSettingsScreen(
                             }
                         }
                         Text(
-                            uiText("Profile details stay on this device; no account or cloud sync."),
+                            uiText("Profile details are stored locally. Android can include this app in device backup if enabled."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 14.dp),
@@ -109,6 +163,23 @@ internal fun NotebookSettingsScreen(
                             label = { Text(uiText("Profile name")) },
                             singleLine = true,
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            TextButton(onClick = {
+                                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }) { Text(uiText("Choose profile picture")) }
+                            if (profilePhotoPath != null) {
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        try {
+                                            onSaveProfilePhoto(null)
+                                            snackbar.showSnackbar(uiText("Profile picture removed."))
+                                        } catch (exception: Exception) {
+                                            snackbar.showSnackbar(uiText(exception.message ?: "The profile photo could not be saved."))
+                                        }
+                                    }
+                                }) { Text(uiText("Remove photo")) }
+                            }
+                        }
                         Button(
                             onClick = {
                                 val cleaned = name.trim()
@@ -168,6 +239,82 @@ internal fun NotebookSettingsScreen(
                     onClick = onVoiceCommand,
                 )
             }
+            item {
+                SettingsActionCard(
+                    title = "Reminder sound & alerts",
+                    description = uiText("Alarm-style reminder sound and vibration are controlled by Android notification channels."),
+                    action = "Open notification settings",
+                    onClick = onOpenAlertSettings,
+                )
+            }
+            item {
+                SettingsActionCard(
+                    title = "Help & App Info",
+                    description = "${uiText("Version")} $appVersionName · ${uiText("Offline-first notebook with Android backup support.")}",
+                    action = "Open Help & App Info",
+                    onClick = { showHelp = true },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HelpAndAppInfoScreen(
+    versionName: String,
+    onBack: () -> Unit,
+    onOpenAlertSettings: () -> Unit,
+    onOpenBackupSettings: () -> Unit,
+    onOpenUpdates: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(uiText("Help & App Info"), maxLines = 1) },
+                navigationIcon = {
+                    androidx.compose.material3.IconButton(onClick = onBack) {
+                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText("Back to settings"))
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                    Text("NAHIAN'S NOTEBOOK", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("${uiText("App version")}: $versionName", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                    Text(uiText("Help and app information"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
+                }
+            }
+            SettingsActionCard(
+                title = "Using your notebook",
+                description = uiText("Notes autosave on this device. Checklists open as folders; use the edit controls to rename lists or change tasks."),
+                action = "Got it",
+                onClick = onBack,
+            )
+            SettingsActionCard(
+                title = "Reminders and privacy",
+                description = uiText("Time reminders use Android alarms. Place reminders use Android geofencing, not continuous background GPS. Android notification and battery settings can affect delivery."),
+                action = "Open notification settings",
+                onClick = onOpenAlertSettings,
+            )
+            SettingsActionCard(
+                title = "Automatic Google backup",
+                description = uiText("Your data stays available offline on this phone. If Android backup is enabled for your Google account, Android can back up this app's local notes, lists, reminders, profile, and preferences. Backup timing is controlled by Android; it is not instant sync."),
+                action = "Open Android backup settings",
+                onClick = onOpenBackupSettings,
+            )
+            SettingsActionCard(
+                title = "Updates and downloads",
+                description = uiText("Open the project's GitHub Actions page to find published app builds. A permanent link to this chat is not available inside the app."),
+                action = "View app updates",
+                onClick = onOpenUpdates,
+            )
         }
     }
 }

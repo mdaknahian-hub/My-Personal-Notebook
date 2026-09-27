@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="notebook_preferences.xml" />
+    <include domain="sharedpref" path="location_reminder_permissions.xml" />
+    <include domain="file" path="profile_photo.jpg" />
+</full-backup-content>

@@ -51,7 +51,7 @@ Map tiles and geocoder search may require connectivity. Once registered, geofenc
 
 ## Verification status
 
-A previous verified code build, [36141458199](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36141458199), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. That run predates the current changes. The current notes/checklist/dashboard/settings/backup/notification changes still need a fresh CI build and tests, and **all new flows still require testing on an actual Android phone**. Do not treat them as device-verified until then.
+The current code build, [36294489997](https://github.com/mdaknahian-hub/My-Personal-Notebook/actions/runs/36294489997), passed JVM unit tests, assembled the debug APK, and uploaded the artifact. This verifies compilation and tests, **not** installation or behavior on a real Android phone. All new flows still require device testing; do not treat them as device-verified until then.
 
 Phone testing should cover:
 

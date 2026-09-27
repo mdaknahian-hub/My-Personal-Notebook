@@ -294,7 +294,7 @@ internal fun NotebookAppRoot(
                             },
                             onOpenBackupSettings = {
                                 try {
-                                    context.startActivity(Intent(Settings.ACTION_BACKUP_SETTINGS))
+                                    context.startActivity(Intent(Settings.ACTION_PRIVACY_SETTINGS))
                                 } catch (_: ActivityNotFoundException) {
                                     try {
                                         context.startActivity(Intent(Settings.ACTION_SETTINGS))

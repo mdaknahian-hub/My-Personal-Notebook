@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
@@ -274,7 +275,7 @@ private fun HelpAndAppInfoScreen(
                 title = { Text(uiText("Help & App Info"), maxLines = 1) },
                 navigationIcon = {
                     androidx.compose.material3.IconButton(onClick = onBack) {
-                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText("Back to settings"))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText("Back to settings"))
                     }
                 },
             )

@@ -344,7 +344,7 @@ private fun HelpAndAppInfoScreen(
             }
             SettingsActionCard(
                 title = "Using your notebook",
-                description = uiText("Notes autosave on this device. Checklists open as folders; use the edit controls to rename lists or change tasks."),
+                description = uiText("Notes autosave on this device. Organize checklist plans by type, set a daily time block, estimate each task, and check tasks off as you go."),
                 action = "Got it",
                 onClick = onBack,
             )

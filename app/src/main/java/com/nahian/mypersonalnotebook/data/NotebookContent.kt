@@ -1,6 +1,7 @@
 package com.nahian.mypersonalnotebook.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -33,6 +34,9 @@ data class NotebookChecklist(
     val title: String,
     val createdAt: Long,
     val updatedAt: Long,
+    @ColumnInfo(defaultValue = "'OTHER'") val categoryType: String = ChecklistCategory.OTHER.storageValue,
+    val scheduledStartMinutes: Int? = null,
+    val scheduledEndMinutes: Int? = null,
 )
 
 @Entity(
@@ -56,6 +60,7 @@ data class NotebookChecklistItem(
     val deadlineAt: Long? = null,
     val countdownDurationMillis: Long? = null,
     val countdownStartedAt: Long? = null,
+    val estimatedDurationMinutes: Int? = null,
 )
 
 data class ChecklistWithItems(
@@ -63,8 +68,12 @@ data class ChecklistWithItems(
     @Relation(parentColumn = "id", entityColumn = "checklistId")
     val items: List<NotebookChecklistItem>,
 ) {
+    val orderedItems: List<NotebookChecklistItem>
+        get() = items.sortedWith(compareBy<NotebookChecklistItem> { it.createdAt }.thenBy { it.id })
     val completedCount: Int get() = items.count { it.isChecked }
     val remainingCount: Int get() = items.size - completedCount
+    val estimatedDurationMinutes: Int get() = items.sumOf { it.estimatedDurationMinutes ?: 0 }
+    val estimatedTaskCount: Int get() = items.count { it.estimatedDurationMinutes != null }
 }
 
 @androidx.room.Dao
@@ -124,7 +133,7 @@ abstract class NotebookContentDao {
 
 @androidx.room.Database(
     entities = [NotebookNote::class, NotebookChecklist::class, NotebookChecklistItem::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class NotebookContentDatabase : RoomDatabase() {
@@ -139,6 +148,15 @@ abstract class NotebookContentDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE notebook_checklists ADD COLUMN categoryType TEXT NOT NULL DEFAULT 'OTHER'")
+                database.execSQL("ALTER TABLE notebook_checklists ADD COLUMN scheduledStartMinutes INTEGER")
+                database.execSQL("ALTER TABLE notebook_checklists ADD COLUMN scheduledEndMinutes INTEGER")
+                database.execSQL("ALTER TABLE notebook_checklist_items ADD COLUMN estimatedDurationMinutes INTEGER")
+            }
+        }
+
         @Volatile
         private var instance: NotebookContentDatabase? = null
 
@@ -149,7 +167,7 @@ abstract class NotebookContentDatabase : RoomDatabase() {
                 "notebook_content.db",
             )
                 // Keep notes and checklist data when adding per-task timing fields.
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 .also { instance = it }
         }
@@ -188,11 +206,48 @@ class NotebookContentRepository(context: Context) {
 
     suspend fun deleteNote(id: String) = dao.deleteNote(id)
 
-    suspend fun createChecklist(title: String): ContentResult {
+    suspend fun createChecklist(
+        title: String,
+        category: ChecklistCategory = ChecklistCategory.OTHER,
+        timeRange: ChecklistTimeRange = ChecklistTimeRange(),
+    ): ContentResult {
         val cleanTitle = title.trim()
         if (cleanTitle.isEmpty()) return ContentResult.Error("Give the checklist a name.")
+        if (!timeRange.isValid()) return ContentResult.Error("Choose both a valid start and end time, or leave the schedule empty.")
         val now = System.currentTimeMillis()
-        dao.upsertChecklist(NotebookChecklist(UUID.randomUUID().toString(), cleanTitle, now, now))
+        dao.upsertChecklist(
+            NotebookChecklist(
+                id = UUID.randomUUID().toString(),
+                title = cleanTitle,
+                createdAt = now,
+                updatedAt = now,
+                categoryType = category.storageValue,
+                scheduledStartMinutes = timeRange.startMinutes,
+                scheduledEndMinutes = timeRange.endMinutes,
+            ),
+        )
+        return ContentResult.Success
+    }
+
+    suspend fun updateChecklistPlan(
+        id: String,
+        title: String,
+        category: ChecklistCategory,
+        timeRange: ChecklistTimeRange,
+    ): ContentResult {
+        val cleaned = title.trim()
+        if (cleaned.isEmpty()) return ContentResult.Error("Give the checklist a name.")
+        if (!timeRange.isValid()) return ContentResult.Error("Choose both a valid start and end time, or leave the schedule empty.")
+        val existing = dao.getChecklist(id) ?: return ContentResult.Error("This checklist no longer exists.")
+        dao.upsertChecklist(
+            existing.copy(
+                title = cleaned,
+                updatedAt = System.currentTimeMillis(),
+                categoryType = category.storageValue,
+                scheduledStartMinutes = timeRange.startMinutes,
+                scheduledEndMinutes = timeRange.endMinutes,
+            ),
+        )
         return ContentResult.Success
     }
 
@@ -214,9 +269,13 @@ class NotebookContentRepository(context: Context) {
         itemId: String,
         text: String,
         timeLimit: ChecklistTaskTimeLimit,
+        estimatedDurationMinutes: Int?,
     ): ContentResult {
         val cleaned = text.trim()
         if (cleaned.isEmpty()) return ContentResult.Error("Write a checklist item first.")
+        if (estimatedDurationMinutes == null || !isValidEstimatedDuration(estimatedDurationMinutes)) {
+            return ContentResult.Error("Choose an estimated time between 1 minute and 24 hours.")
+        }
         if (!timeLimit.isValid()) return ContentResult.Error("Choose one valid task time limit.")
         val existingList = dao.getChecklist(checklistId) ?: return ContentResult.Error("This checklist no longer exists.")
         val existingItem = dao.getChecklistItem(itemId)?.takeIf { it.checklistId == checklistId }
@@ -233,6 +292,7 @@ class NotebookContentRepository(context: Context) {
             deadlineAt = timeLimit.deadlineAt,
             countdownDurationMillis = timeLimit.countdownDurationMillis,
             countdownStartedAt = countdownStartedAt,
+            estimatedDurationMinutes = estimatedDurationMinutes,
         )
         dao.upsertChecklistItem(updatedItem)
         dao.touchChecklist(existingList.id, now)
@@ -245,9 +305,13 @@ class NotebookContentRepository(context: Context) {
         checklistId: String,
         text: String,
         timeLimit: ChecklistTaskTimeLimit = ChecklistTaskTimeLimit.None,
+        estimatedDurationMinutes: Int? = null,
     ): ContentResult {
         val cleanText = text.trim()
         if (cleanText.isEmpty()) return ContentResult.Error("Write a checklist item first.")
+        if (estimatedDurationMinutes == null || !isValidEstimatedDuration(estimatedDurationMinutes)) {
+            return ContentResult.Error("Choose an estimated time between 1 minute and 24 hours.")
+        }
         if (!timeLimit.isValid()) return ContentResult.Error("Choose one valid task time limit.")
         if (dao.getChecklist(checklistId) == null) return ContentResult.Error("This checklist no longer exists.")
         val now = System.currentTimeMillis()
@@ -260,6 +324,7 @@ class NotebookContentRepository(context: Context) {
             deadlineAt = timeLimit.deadlineAt,
             countdownDurationMillis = timeLimit.countdownDurationMillis,
             countdownStartedAt = if (timeLimit.startCountdownWhenSaved) now else null,
+            estimatedDurationMinutes = estimatedDurationMinutes,
         )
         dao.upsertChecklistItem(item)
         dao.touchChecklist(checklistId, now)

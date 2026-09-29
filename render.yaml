@@ -4,16 +4,13 @@ services:
   - type: web
     name: dokan-hishab
     runtime: docker
-    # ডিস্ক (SQLite ডেটা টিকিয়ে রাখতে) Starter প্ল্যান থেকে শুরু।
-    # শুধু ডেমো দেখতে চাইলে plan: free + disk অংশ মুছে দিন (তবে রিডিপ্লয়ে হিসাব মুছবে!)
-    plan: starter
+    # Free প্ল্যান ($০): ডিস্ক নেই — রিডিপ্লয়/রিস্টার্টে SQLite ডেটা মুছবে,
+    # আর ১৫ মিনিট অব্যবহৃত থাকলে সার্ভার ঘুমায় (প্রথম লোডে ~১ মিনিট লাগে)।
+    # আসল দোকানে চালাতে চাইলে plan: starter + নিচের disk অংশ ফিরিয়ে দিন।
+    plan: free
     healthCheckPath: /api/ping
     envVars:
       - key: AUTH_SECRET
         generateValue: true
       - key: DATABASE_URL
         value: /data/dokan.db
-    disk:
-      name: dokan-data
-      mountPath: /data
-      sizeGB: 1
